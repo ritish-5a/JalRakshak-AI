@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="theme-color" content="#18181b"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="description" content="100% Offline-First Early Warning & Disaster Command System for Karnataka Heavy Rainfall (SIH26071)"/>
+  <title>JalRakshak AI | Karnataka Heavy Rainfall & Flood Intelligence Command</title>
+  
+  <!-- PWA Web App Manifest -->
+  <link rel="manifest" href="manifest.json"/>
+
+  <!-- Local Leaflet CSS & JS (100% Offline) -->
+  <link rel="stylesheet" href="leaflet.css"/>
+  <script src="leaflet.js"></script>
+  
+  <!-- Custom & Bundled Offline Stylesheet (Local Fonts, Material Symbols, Tailwind Utilities & Component Styles) -->
+  <link rel="stylesheet" href="styles.css"/>
+
+  <!-- Local Tailwind Engine -->
+  <script src="tailwindcss.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              cream: '#f6f3eb',
+              card: '#ffffff',
+              dark: '#18181b',
+              yellow: '#f59e0b',
+              cyan: '#0284c7',
+              rose: '#e11d48',
+              emerald: '#10b981'
+            }
+          },
+          fontFamily: {
+            sans: ['Plus Jakarta Sans', 'sans-serif'],
+            display: ['Space Grotesk', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-[#f6f3eb] text-zinc-900 font-sans min-h-screen p-4 md:p-8 select-none relative">
+
+  <!-- TOP-RIGHT HIGH VISIBILITY ALERT TOAST NOTIFICATION POPUP -->
+  <div id="topRightAlertToast" class="bg-zinc-900 text-white p-4 rounded-2xl shadow-2xl border border-zinc-700 max-w-sm flex items-start gap-3">
+    <div class="w-9 h-9 rounded-xl bg-rose-600 flex items-center justify-center text-white shrink-0 mt-0.5">
+      <span class="material-symbols-outlined text-xl">emergency</span>
+    </div>
+    <div class="space-y-1">
+      <div id="toastTitle" class="font-bold text-xs text-rose-400 font-mono">🚨 MANUAL SOS DISPATCH TRIGGERED</div>
+      <div id="toastBody" class="text-[11px] text-zinc-300 font-mono">Payload dispatches over GSM SMS to SDRF Emergency Lines!</div>
+    </div>
+    <button onclick="dismissToast()" class="text-zinc-400 hover:text-white ml-auto">
+      <span class="material-symbols-outlined text-base">close</span>
+    </button>
+  </div>
+
+  <!-- MAIN CONTAINER -->
+  <div class="max-w-7xl mx-auto space-y-6">
+
+    <!-- TOP NAVIGATION BAR -->
+    <header class="cream-card p-4 flex flex-wrap items-center justify-between gap-4">
+      
+      <!-- BRAND LOGO PILL -->
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-2xl bg-zinc-900 text-white flex items-center justify-center font-extrabold text-lg shadow-md font-display">
+          JR
+        </div>
+        <div>
+          <span class="font-extrabold text-lg tracking-tight font-display text-zinc-900">JalRakshak AI</span>
+          <span id="headerModeBadge" class="ml-2 text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-bold transition-all">100% OFFLINE PWA</span>
+        </div>
+      </div>
+
+      <!-- TOP NAVIGATION PILLS -->
+      <nav class="flex items-center gap-1 bg-[#ece7db] p-1.5 rounded-full text-xs font-semibold overflow-x-auto">
+        <button class="pill-btn px-4 py-2 active" onclick="switchNavTab('dash-tab', this)">Dashboard</button>
+        <button class="pill-btn px-4 py-2" onclick="switchNavTab('map-tab', this)">Karnataka GIS Map</button>
+        <button class="pill-btn px-4 py-2" onclick="switchNavTab('vector-canvas-tab', this)">Canvas Vector Map</button>
+        <button class="pill-btn px-4 py-2" onclick="switchNavTab('sources-tab', this)">Multi-Source Data</button>
+        <button class="pill-btn px-4 py-2" onclick="switchNavTab('sonar-tab', this)">Sonic Hydro Scanner</button>
+        <button class="pill-btn px-4 py-2" onclick="switchNavTab('hydro-tab', this)">Hydro Engine</button>
+        <button class="pill-btn px-4 py-2" onclick="openNDMAReportModal()">NDMA Report</button>
+      </nav>
+
+      <!-- SEARCH & USER PROFILE -->
+      <div class="flex items-center gap-3 relative">
+        <div class="relative w-44 sm:w-64">
+          <span class="material-symbols-outlined absolute left-3 top-2 text-zinc-400 text-lg pointer-events-none">search</span>
+          <input type="text" id="districtSearchInput" oninput="onSearchInput(this.value)" autocomplete="off" placeholder="Search Karnataka..." class="bg-[#ece7db] border-none rounded-full pl-9 pr-8 py-1.5 text-xs font-mono text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 w-full transition-all"/>
+          <button id="clearSearchBtn" onclick="clearSearchInput()" class="hidden absolute right-2.5 top-1.5 text-zinc-400 hover:text-zinc-900">
+            <span class="material-symbols-outlined text-sm">cancel</span>
+          </button>
+          
+          <!-- INTERACTIVE GEOCODING SEARCH SUGGESTIONS DROPDOWN -->
+          <div id="searchResultsDropdown" class="absolute left-0 right-0 top-full mt-2 bg-white rounded-2xl shadow-2xl border border-zinc-200 z-50 hidden max-h-72 overflow-y-auto p-2 font-mono text-xs divide-y divide-zinc-100">
+          </div>
+        </div>
+
+        <!-- PROMINENT HIGH-VISIBILITY SOS EMERGENCY BUTTON -->
+        <button onclick="openEmergencySOSModal()" class="px-3.5 py-1.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-mono text-xs font-black flex items-center gap-1.5 transition-all shadow-lg shrink-0 border border-rose-500 animate-pulse cursor-pointer" title="Trigger Instant 3-Channel Emergency SOS">
+          <span class="material-symbols-outlined text-base">emergency</span>
+          <span class="tracking-tight">SOS EMERGENCY</span>
+        </button>
+
+        <!-- PROMINENT OFFLINE MODE TOGGLE BUTTON -->
+        <button id="offlineModeToggleBtn" onclick="toggleOfflineCrisisMode()" class="px-3.5 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white font-mono text-xs font-bold flex items-center gap-2 transition-all shadow-md shrink-0 border border-zinc-700 cursor-pointer" title="Toggle 100% Offline Crisis Mode">
+          <span id="offlineToggleSwitch" class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+          <span id="offlineToggleText" class="tracking-tight">OFFLINE MODE: OFF</span>
+        </button>
+
+        <button onclick="toggleSystemOfflineMode()" id="offlineStatusBtn" class="w-9 h-9 rounded-full bg-[#ece7db] hover:bg-zinc-300 flex items-center justify-center text-zinc-700 transition-all shrink-0" title="System Status & Cache Stats">
+          <span id="offlineIndicatorDot" class="w-3 h-3 rounded-full bg-emerald-500"></span>
+        </button>
+
+        <div class="w-9 h-9 rounded-full bg-zinc-900 text-white flex items-center justify-center font-bold text-xs shadow-md shrink-0">
+          KA
+        </div>
+      </div>
+    </header>
+
+    <!-- WELCOME GREETING HEADLINE & BIG STAT COUNTERS -->
+    <section class="flex flex-wrap items-end justify-between gap-6 px-2">
+      <div>
+        <div class="text-xs font-mono text-zinc-500 font-bold uppercase tracking-wider">STATE DISASTER INTELLIGENCE</div>
+        <h1 class="text-3xl sm:text-4xl font-black font-display text-zinc-900 mt-1 tracking-tight">
+          Welcome to JalRakshak AI, Karnataka Disaster Command
+        </h1>
+        <p class="text-sm text-zinc-600 font-medium mt-1">
+          Heavy Rainfall Early Warning System across Karnataka (31 Districts Monitored 100% Offline)
+        </p>
+      </div>
+
+      <!-- BIG STAT NUMBERS -->
+      <div class="flex items-center gap-6">
+        <div class="text-center">
+          <div class="text-3xl font-extrabold font-display text-zinc-900">31</div>
+          <div class="text-[11px] font-mono text-zinc-500 font-semibold">Districts</div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-extrabold font-display text-rose-600" id="statRainfall">142.5</div>
+          <div class="text-[11px] font-mono text-zinc-500 font-semibold">mm/h Rain</div>
+        </div>
+        <div class="text-center">
+          <div class="text-3xl font-extrabold font-display text-amber-500" id="statDepth">850</div>
+          <div class="text-[11px] font-mono text-zinc-500 font-semibold">mm Depth</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ACTION BUTTONS & FILTERS BAR -->
+    <div class="flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-2 overflow-x-auto text-xs font-medium">
+        <button class="px-3.5 py-1.5 rounded-full bg-zinc-900 text-white font-semibold" onclick="filterDistrictCategory('all', this)">All 31 Districts</button>
+        <button class="px-3.5 py-1.5 rounded-full bg-[#ece7db] hover:bg-zinc-300 text-zinc-700" onclick="filterDistrictCategory('coastal', this)">Coastal & Ghats</button>
+        <button class="px-3.5 py-1.5 rounded-full bg-[#ece7db] hover:bg-zinc-300 text-zinc-700" onclick="filterDistrictCategory('urban', this)">Urban Hubs</button>
+        <button class="px-3.5 py-1.5 rounded-full bg-[#ece7db] hover:bg-zinc-300 text-zinc-700" onclick="filterDistrictCategory('critical', this)">Critical Alert</button>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- PROMINENT 3-CHANNEL SOS EMERGENCY TRIGGER BUTTON -->
+        <button onclick="openEmergencySOSModal()" class="px-5 py-2.5 rounded-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-mono text-xs font-black shadow-xl flex items-center gap-2 transition-all ring-2 ring-rose-400 ring-offset-2 hover:ring-rose-500 cursor-pointer">
+          <span class="material-symbols-outlined text-base animate-pulse">e911_emergency</span>
+          SOS EMERGENCY (3 CHANNELS)
+        </button>
+
+        <!-- SIMULATE CLOUDBURST BUTTON -->
+        <button onclick="triggerCriticalDisasterSimulation()" class="px-4 py-2.5 rounded-full bg-amber-500 hover:bg-amber-600 text-zinc-950 font-mono text-xs font-bold flex items-center gap-2">
+          <span class="material-symbols-outlined text-sm">thunderstorm</span>
+          SIMULATE CLOUDBURST
+        </button>
+
+        <button onclick="openNDMAReportModal()" class="px-4 py-2.5 rounded-full bg-[#ece7db] hover:bg-zinc-300 text-zinc-900 font-mono text-xs font-bold flex items-center gap-2">
+          <span class="material-symbols-outlined text-sm">picture_as_pdf</span>
+          Export NDMA PDF
+        </button>
+      </div>
+    </div>
+
+    <!-- TOP ROW WIDGET CARDS -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6" id="dash-tab-section">
+      
+      <!-- CARD 1: USER / COMMAND LOCATION CARD -->
+      <div class="cream-card p-5 space-y-3.5 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-2xl bg-cyan-100 text-cyan-800 flex items-center justify-center font-bold text-lg font-display">
+              <span class="material-symbols-outlined text-2xl">location_on</span>
+            </div>
+            <div>
+              <h3 class="font-bold text-sm text-zinc-900 font-display">Command & User GPS</h3>
+              <p class="text-[11px] text-zinc-500">Karnataka SDRF Unit</p>
+            </div>
+            <span id="userLocationSourceBadge" class="ml-auto text-[10px] font-mono px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full font-bold">GPS ACTIVE</span>
+          </div>
+
+          <div class="mt-3 p-3 rounded-2xl bg-[#fbf9f4] border border-zinc-200/70 text-xs font-mono space-y-1.5">
+            <div class="flex items-center justify-between text-[10px]">
+              <span class="text-zinc-500 font-semibold uppercase tracking-wider">PRECISE POSITION</span>
+              <span id="userAccuracyBadge" class="text-cyan-700 font-bold">±10m Accuracy</span>
+            </div>
+            <div id="userCoordsText" class="text-zinc-900 font-extrabold text-[13px] tracking-tight">Lat: 13.1007, Lon: 77.5963</div>
+            <div id="userLocationBadge" class="text-emerald-600 font-semibold text-[11px] flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse shrink-0"></span>
+              <span id="userLocationBadgeText" class="truncate">Yelahanka / Rajankunte Sector Verified</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- LOCATION ACTION CONTROLS: DETECT LIVE LOCATION + SET CITY/DISTRICT MANUAL PICKER -->
+        <div class="space-y-2 pt-1 font-mono text-xs">
+          <button id="detectLiveLocationBtn" onclick="detectUserLiveLocation()" class="w-full py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white font-bold text-[11px] flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer">
+            <span id="detectGpsIcon" class="material-symbols-outlined text-sm">my_location</span>
+            <span id="detectGpsText">Detect Live Location</span>
+          </button>
+
+          <div class="flex items-center gap-1.5">
+            <label for="userCityDistrictPicker" class="text-[10px] font-bold text-zinc-500 shrink-0">District:</label>
+            <select id="userCityDistrictPicker" onchange="setUserManualDistrict(this.value)" class="w-full py-1.5 px-2 rounded-xl bg-[#ece7db] hover:bg-[#e4ded0] border-none text-[11px] font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 cursor-pointer">
+              <option value="" disabled>-- Set My City / District --</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- CARD 2: PROGRESS / INUNDATION BAR CHART CARD -->
+      <div class="cream-card p-5 space-y-3">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-xs text-zinc-900 font-display">Inundation Rate</h3>
+          <span class="text-[10px] font-mono px-2 py-0.5 bg-rose-100 text-rose-700 rounded-full font-bold">142.5 mm/h</span>
+        </div>
+        <div class="text-2xl font-black font-display text-zinc-900">High Cloudburst</div>
+
+        <!-- Weekly Rainfall Bar Visualizer -->
+        <div class="flex items-end justify-between h-20 pt-2 px-1">
+          <div class="flex flex-col items-center gap-1"><div class="w-2.5 bg-zinc-300 rounded-full h-8"></div><span class="text-[9px] font-mono text-zinc-400">S</span></div>
+          <div class="flex flex-col items-center gap-1"><div class="w-2.5 bg-zinc-900 rounded-full h-14"></div><span class="text-[9px] font-mono text-zinc-400">M</span></div>
+          <div class="flex flex-col items-center gap-1"><div class="w-2.5 bg-zinc-900 rounded-full h-10"></div><span class="text-[9px] font-mono text-zinc-400">T</span></div>
+          <div class="flex flex-col items-center gap-1"><div class="w-2.5 bg-rose-500 rounded-full h-16"></div><span class="text-[9px] font-mono text-zinc-400">W</span></div>
+          <div class="flex flex-col items-center gap-1"><div class="w-2.5 bg-amber-500 rounded-full h-12"></div><span class="text-[9px] font-mono text-zinc-400">T</span></div>
+          <div class="flex flex-col items-center gap-1"><div class="w-2.5 bg-zinc-900 rounded-full h-14"></div><span class="text-[9px] font-mono text-zinc-400">F</span></div>
+          <div class="flex flex-col items-center gap-1"><div class="w-2.5 bg-zinc-300 rounded-full h-6"></div><span class="text-[9px] font-mono text-zinc-400">S</span></div>
+        </div>
+      </div>
+
+      <!-- CARD 3: WATER ELEVATION GAUGE -->
+      <div class="cream-card p-5 space-y-2 flex flex-col items-center justify-center text-center relative">
+        <h3 class="font-bold text-xs text-zinc-500 font-display" id="gaugeLocationTitle">Water Elevation Gauge</h3>
+        
+        <div class="relative w-28 h-28 flex items-center justify-center my-1">
+          <svg class="w-full h-full transform -rotate-90" viewBox="0 0 36 36">
+            <path class="text-zinc-200" stroke-width="3.5" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+            <path id="gaugePath" class="text-rose-500 transition-all duration-700" stroke-dasharray="75, 100" stroke-width="3.5" stroke-linecap="round" stroke="currentColor" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+          </svg>
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span id="gaugeDepthText" class="text-xl font-black font-display text-zinc-900">850mm</span>
+            <span id="gaugeCurbText" class="text-[9px] font-mono text-rose-600 font-bold">+450mm Curb</span>
+          </div>
+        </div>
+        <div id="gaugeStatusText" class="text-[11px] font-mono text-zinc-500 font-bold">Pavement Danger Limit Exceeded</div>
+      </div>
+
+      <!-- CARD 4: MULTI-SOURCE INUNDATION SOURCES PROGRESS -->
+      <div class="cream-card p-5 space-y-3" id="sources-tab-section">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-xs text-zinc-900 font-display">Inundation Pipeline</h3>
+          <span class="text-xs font-mono font-bold text-emerald-600">4 / 4 ACTIVE</span>
+        </div>
+
+        <div class="space-y-2 text-xs font-mono">
+          <div class="flex items-center justify-between">
+            <span class="text-zinc-600">1. INSAT-3D Satellite</span>
+            <span class="font-bold text-zinc-900">100%</span>
+          </div>
+          <div class="w-full bg-zinc-100 rounded-full h-2 overflow-hidden">
+            <div class="bg-zinc-900 h-full w-full"></div>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-zinc-600">2. S-Band DWR Radar</span>
+            <span class="font-bold text-amber-600">52.4 dBZ</span>
+          </div>
+          <div class="w-full bg-zinc-100 rounded-full h-2 overflow-hidden">
+            <div class="bg-amber-500 h-full w-4/5"></div>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <span class="text-zinc-600">3. CWC & IMD Gauges</span>
+            <span class="font-bold text-emerald-600">Synced</span>
+          </div>
+          <div class="w-full bg-zinc-100 rounded-full h-2 overflow-hidden">
+            <div class="bg-emerald-500 h-full w-full"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- MIDDLE SECTION: LEAFLET MAP & ACOUSTIC SONIC SONAR SCANNER -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- KARNATAKA GIS RADAR MAP (2 COLS) -->
+      <div class="lg:col-span-2 cream-card p-5 space-y-3 flex flex-col h-[520px] relative overflow-hidden" id="map-tab-section">
+        <div class="flex flex-wrap items-center justify-between gap-2 z-10 bg-white/95 p-3 rounded-2xl border border-zinc-200 shadow-sm">
+          <div class="flex items-center gap-2">
+            <span class="material-symbols-outlined text-zinc-900">map</span>
+            <div>
+              <div class="font-bold text-xs font-mono text-zinc-900">KARNATAKA LEAFLET GIS & OPEN-METEO WEATHER MAP</div>
+              <div id="weatherSyncBadge" class="text-[9px] font-mono text-sky-700 font-bold">📡 Open-Meteo Live API Active</div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="mapDetectLocationBtn" onclick="detectUserLiveLocation()" class="px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm cursor-pointer" title="Detect & Pan to Live GPS Position">
+              <span class="material-symbols-outlined text-xs">my_location</span>
+              <span>LIVE GPS</span>
+            </button>
+            <button id="syncWeatherBtn" onclick="fetchOpenMeteoKarnatakaWeather(true)" class="px-3 py-1 rounded-full bg-cyan-600 hover:bg-cyan-700 text-white font-mono text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm">
+              <span class="material-symbols-outlined text-xs">sync</span>
+              📡 SYNC OPEN-METEO
+            </button>
+            <button id="toggleMapModeBtn" onclick="toggleMapTileMode()" class="px-3 py-1 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white font-mono text-[10px] font-bold flex items-center gap-1 transition-all shadow-sm">
+              <span class="material-symbols-outlined text-xs">layers</span>
+              <span id="mapModeText">CARTO VOYAGER</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- BASE MAP SWITCHER PILLS -->
+        <div class="flex items-center gap-1.5 z-10 px-1 font-mono text-[10px] overflow-x-auto">
+          <span class="text-zinc-500 font-bold uppercase text-[9px] mr-1 shrink-0">BASE MAP:</span>
+          <button id="baseMapBtn_carto" onclick="setBaseMapLayer('carto')" class="px-2.5 py-1 rounded-full bg-zinc-900 text-white font-bold flex items-center gap-1 transition-all shadow-sm shrink-0">
+            🗺️ CartoDB Voyager
+          </button>
+          <button id="baseMapBtn_cartoDark" onclick="setBaseMapLayer('cartoDark')" class="px-2.5 py-1 rounded-full bg-zinc-200 text-zinc-700 hover:bg-zinc-300 font-bold flex items-center gap-1 transition-all shrink-0">
+            🌑 CartoDB Dark
+          </button>
+          <button id="baseMapBtn_esri" onclick="setBaseMapLayer('esri')" class="px-2.5 py-1 rounded-full bg-zinc-200 text-zinc-700 hover:bg-zinc-300 font-bold flex items-center gap-1 transition-all shrink-0">
+            ⛰️ Esri Topo
+          </button>
+          <button id="baseMapBtn_satellite" onclick="setBaseMapLayer('satellite')" class="px-2.5 py-1 rounded-full bg-zinc-200 text-zinc-700 hover:bg-zinc-300 font-bold flex items-center gap-1 transition-all shrink-0">
+            🛰️ Satellite
+          </button>
+          <button id="baseMapBtn_vector" onclick="setBaseMapLayer('vector')" class="px-2.5 py-1 rounded-full bg-zinc-200 text-zinc-700 hover:bg-zinc-300 font-bold flex items-center gap-1 transition-all shrink-0">
+            ⚡ Vector Offline
+          </button>
+        </div>
+
+        <!-- MAP LAYER TOGGLE PILLS -->
+        <div class="flex items-center gap-1.5 z-10 px-1 font-mono text-[10px] overflow-x-auto">
+          <span class="text-zinc-500 font-bold uppercase text-[9px] mr-1 shrink-0">OVERLAYS:</span>
+          <button id="layerBtn_weather" onclick="toggleMapWeatherLayer('weather')" class="px-2.5 py-1 rounded-full bg-zinc-900 text-white font-bold flex items-center gap-1 transition-colors">
+            🌧️ Weather
+          </button>
+          <button id="layerBtn_radar" onclick="toggleMapWeatherLayer('radar')" class="px-2.5 py-1 rounded-full bg-zinc-900 text-white font-bold flex items-center gap-1 transition-colors">
+            📡 Radar Circles
+          </button>
+          <button id="layerBtn_floods" onclick="toggleMapWeatherLayer('floods')" class="px-2.5 py-1 rounded-full bg-zinc-900 text-white font-bold flex items-center gap-1 transition-colors">
+            🌊 Inundation
+          </button>
+          <button id="layerBtn_hospitals" onclick="toggleMapWeatherLayer('hospitals')" class="px-2.5 py-1 rounded-full bg-zinc-900 text-white font-bold flex items-center gap-1 transition-colors">
+            🏥 Hospitals
+          </button>
+        </div>
+
+        <!-- LEAFLET MAP ELEMENT -->
+        <div id="karnatakaMap" class="w-full flex-1 rounded-2xl z-0 border border-zinc-200"></div>
+      </div>
+
+      <!-- ACOUSTIC SONIC HYDRO-DEPTH SCANNER CARD -->
+      <div class="cream-card p-5 space-y-4 flex flex-col justify-between border-amber-300" id="sonar-tab-section">
+        <div>
+          <div class="flex items-center justify-between pb-2 border-b border-zinc-200">
+            <span class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-mono text-[10px] font-bold">WORLD-FIRST FEATURE</span>
+            <span id="sonicMicStatus" class="text-xs font-mono text-zinc-500">Web Audio Sonar</span>
+          </div>
+          <h3 class="text-lg font-bold font-display text-zinc-900 mt-2">Sonic Hydro-Depth Scanner</h3>
+          <p class="text-xs text-zinc-600 mt-1">Measures flood water depth down to the millimeter completely offline using phone speaker acoustic chirp tones & microphone echo reflection timing.</p>
+        </div>
+
+        <canvas id="sonicVisualizer" width="300" height="120" class="w-full h-28 rounded-xl bg-zinc-900 border border-zinc-800"></canvas>
+
+        <div class="space-y-2 font-mono text-xs">
+          <div class="flex justify-between">
+            <span class="text-zinc-500">Echo Delta Latency:</span>
+            <span id="echoDeltaTimeText" class="font-bold text-amber-600">-- ms</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-zinc-500">Sound Pressure Level:</span>
+            <span id="splDbText" class="font-bold text-cyan-600">-- dB SPL</span>
+          </div>
+          <div class="flex justify-between border-t border-zinc-200 pt-2">
+            <span class="text-zinc-500">Calculated Water Depth:</span>
+            <span id="calculatedDepthMmText" class="text-2xl font-black text-rose-600">0.0 mm</span>
+          </div>
+        </div>
+
+        <button id="startSonicScanBtn" onclick="runSonicHydroDepthScan()" class="w-full py-3 rounded-2xl bg-zinc-900 hover:bg-zinc-800 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 shadow-md">
+          <span class="material-symbols-outlined text-base">graphic_eq</span>
+          EMIT 14kHz ACOUSTIC CHIRP PULSE
+        </button>
+      </div>
+
+    </div>
+
+    <!-- HYDROLOGICAL SCS-CN RUNOFF ENGINE SECTION -->
+    <div class="cream-card p-6 space-y-4" id="hydro-tab-section">
+      <div class="flex items-center justify-between border-b border-zinc-200 pb-3">
+        <div>
+          <h3 class="text-lg font-bold font-display text-zinc-900">Hydrological SCS-CN Runoff Engine (On-Device Calculator)</h3>
+          <p class="text-xs font-mono text-zinc-500">Soil Conservation Service Curve Number flood depth prediction (100% Offline)</p>
+        </div>
+        <span class="px-3 py-1 rounded-full bg-cyan-100 text-cyan-800 font-mono text-xs font-bold">CN: 92 (Urban Basin)</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4 font-mono text-xs">
+        <div>
+          <label class="block text-zinc-600 font-bold mb-1">Rain Rate (mm/h)</label>
+          <input type="number" id="hydroRainInput" value="120" class="w-full p-2 rounded-xl border border-zinc-300 bg-[#fbf9f4] font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"/>
+        </div>
+        <div>
+          <label class="block text-zinc-600 font-bold mb-1">Duration (Hours)</label>
+          <input type="number" id="hydroDurationInput" value="2.0" step="0.5" class="w-full p-2 rounded-xl border border-zinc-300 bg-[#fbf9f4] font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"/>
+        </div>
+        <div>
+          <label class="block text-zinc-600 font-bold mb-1">Area (sq. km)</label>
+          <input type="number" id="hydroAreaInput" value="15.5" class="w-full p-2 rounded-xl border border-zinc-300 bg-[#fbf9f4] font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900"/>
+        </div>
+        <div class="flex items-end">
+          <button onclick="calculateOnDeviceHydroModel()" class="w-full p-2.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white font-bold flex items-center justify-center gap-2">
+            <span class="material-symbols-outlined text-sm">calculate</span>
+            COMPUTE RUNOFF
+          </button>
+        </div>
+      </div>
+
+      <div id="hydroOutputBox" class="p-4 rounded-2xl bg-[#fbf9f4] border border-zinc-200 font-mono text-xs space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-zinc-600">Calculated Peak Runoff: <b id="hydroRunoffResult" class="text-rose-600 text-sm">184.2 mm</b></span>
+          <span id="hydroHazardBadge" class="px-2.5 py-1 rounded-full bg-rose-100 text-rose-800 font-bold">CRITICAL FLOOD EMERGENCY</span>
+        </div>
+        <div class="text-zinc-500 text-[11px]" id="hydroDetailsText">Total Runoff Volume: 2,855,100 m³ | Peak Discharge: 420.5 m³/s | Calculated Surface Depth: 850 mm</div>
+      </div>
+    </div>
+
+    <!-- STANDALONE OFFLINE VECTOR CANVAS GIS & HISTORICAL MATRIX -->
+    <div class="cream-card p-6 space-y-5" id="vector-canvas-tab-section">
+      <div id="offline-weather-tab-content" class="space-y-5">
+        <!-- HEADER ROW WITH STATUS & SCALE -->
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200/80 pb-3">
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="px-2.5 py-0.5 rounded-full bg-cyan-100 text-cyan-800 font-mono text-[10px] font-extrabold">100% OFFLINE ZERO-DATA</span>
+              <span class="text-xs font-mono text-zinc-500">HTML5 Canvas GIS & SCS-CN Matrix</span>
+            </div>
+            <h3 class="text-xl font-bold font-display text-zinc-900 mt-1">Karnataka Offline Vector GIS Canvas Map</h3>
+            <p class="text-xs text-zinc-600 font-mono">Real-time interactive vector rendering of all 31 Karnataka districts, rivers, wind vectors & rainfall simulations.</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="canvasZoomScaleText" class="px-3 py-1.5 rounded-full bg-zinc-900 text-cyan-300 font-mono text-[10px] font-bold shadow-sm">Scale: 1.0x | lat:[11.2 - 18.8° N], lon:[74.0 - 78.6° E]</span>
+          </div>
+        </div>
+
+        <!-- CONTROLS & LAYER FILTER BAR -->
+        <div class="flex flex-wrap items-center justify-between gap-3 bg-[#fbf9f4] p-3.5 rounded-2xl border border-zinc-200 text-xs font-mono">
+          <!-- LAYER TOGGLE CHECKBOXES -->
+          <div class="flex flex-wrap items-center gap-4">
+            <span class="text-zinc-500 font-bold uppercase text-[10px]">LAYERS:</span>
+            <label class="flex items-center gap-1.5 cursor-pointer font-bold text-zinc-800 hover:text-cyan-700 select-none">
+              <input type="checkbox" id="toggleLayerRain" checked onchange="drawOfflineVectorCanvasMap()" class="rounded text-cyan-600 focus:ring-0">
+              🌧️ Rain Particle Stream
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer font-bold text-zinc-800 hover:text-amber-700 select-none">
+              <input type="checkbox" id="toggleLayerWind" checked onchange="drawOfflineVectorCanvasMap()" class="rounded text-amber-600 focus:ring-0">
+              💨 Wind Vectors
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer font-bold text-zinc-800 hover:text-rose-700 select-none">
+              <input type="checkbox" id="toggleLayerFlood" checked onchange="drawOfflineVectorCanvasMap()" class="rounded text-rose-600 focus:ring-0">
+              🌊 Flood Inundation Aura
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer font-bold text-zinc-800 hover:text-emerald-700 select-none">
+              <input type="checkbox" id="toggleLayerGps" checked onchange="drawOfflineVectorCanvasMap()" class="rounded text-emerald-600 focus:ring-0">
+              📍 Live GPS Tracking
+            </label>
+          </div>
+
+          <!-- ZOOM & RESET BUTTONS -->
+          <div class="flex items-center gap-2">
+            <button onclick="zoomOfflineVectorCanvas(1.2)" class="w-8 h-8 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-900 font-black flex items-center justify-center transition-all cursor-pointer shadow-sm" title="Zoom In">
+              <span class="material-symbols-outlined text-base">add</span>
+            </button>
+            <button onclick="zoomOfflineVectorCanvas(0.8)" class="w-8 h-8 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-900 font-black flex items-center justify-center transition-all cursor-pointer shadow-sm" title="Zoom Out">
+              <span class="material-symbols-outlined text-base">remove</span>
+            </button>
+            <button onclick="resetOfflineVectorMapCamera()" class="px-3 py-1.5 rounded-xl bg-zinc-200 hover:bg-zinc-300 text-zinc-900 font-bold text-[10px] transition-all cursor-pointer shadow-sm">
+              RESET CAMERA
+            </button>
+            <button id="toggleGpsTrackingBtn" onclick="toggleOfflineGpsTracking()" class="px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] flex items-center gap-1 transition-all shadow-sm cursor-pointer">
+              <span class="material-symbols-outlined text-xs">my_location</span>
+              <span>ENABLE LIVE GPS</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- SELECTORS & GPS STATUS STRIP -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-xs">
+          <div>
+            <label class="block text-zinc-600 font-bold text-[11px] mb-1">Target District Baseline:</label>
+            <select id="offlineMatrixDistrictSelect" onchange="onOfflineMatrixDistrictChange(this.value)" class="w-full p-2 rounded-xl border border-zinc-300 bg-[#fbf9f4] font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 cursor-pointer"></select>
+          </div>
+          <div>
+            <label class="block text-zinc-600 font-bold text-[11px] mb-1">Seasonal Climatology Month:</label>
+            <select id="offlineMatrixMonthSelect" onchange="onOfflineMatrixMonthChange(this.value)" class="w-full p-2 rounded-xl border border-zinc-300 bg-[#fbf9f4] font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 cursor-pointer">
+              <option value="1">January (Dry Winter)</option>
+              <option value="2">February (Winter)</option>
+              <option value="3">March (Pre-Monsoon Heat)</option>
+              <option value="4">April (Pre-Monsoon Thunderstorms)</option>
+              <option value="5">May (Early Cyclonic Incursions)</option>
+              <option value="6">June (Monsoon Onset)</option>
+              <option value="7">July (Peak Southwest Monsoon)</option>
+              <option value="8">August (Heavy Ghat Precipitation)</option>
+              <option value="9" selected>September (Peak Flood & Cloudburst)</option>
+              <option value="10">October (Northeast Retreating Monsoon)</option>
+              <option value="11">November (Post-Monsoon Showers)</option>
+              <option value="12">December (Winter Dry)</option>
+            </select>
+          </div>
+          <div class="bg-[#fbf9f4] p-2.5 rounded-xl border border-zinc-200 flex flex-col justify-center space-y-1">
+            <div class="text-[10px] text-zinc-500 font-bold uppercase">Device Geolocation Fix:</div>
+            <div class="text-[11px] font-bold text-zinc-900 truncate" id="gpsCoordsText">Lat: 12.9716, Lon: 77.5946 (Fix: ±10m)</div>
+            <div class="text-[10px] text-cyan-700 font-bold truncate">Nearest: <span id="gpsNearestDistrictText">Bengaluru Urban (0.0 km)</span></div>
+          </div>
+        </div>
+
+        <!-- INTERACTIVE CANVAS ELEMENT -->
+        <div class="relative w-full rounded-2xl overflow-hidden border border-zinc-800 bg-zinc-950 shadow-2xl">
+          <canvas id="offlineVectorCanvasMap" width="900" height="520" class="w-full h-[520px] cursor-grab active:cursor-grabbing block"></canvas>
+          <div class="absolute bottom-3 left-3 bg-zinc-900/80 backdrop-blur-sm px-3 py-1.5 rounded-xl border border-zinc-700 text-[10px] font-mono text-zinc-300 pointer-events-none">
+            ⚡ Drag to Pan • Mouse Wheel to Zoom • Realtime Wind & Rain Engine
+          </div>
+        </div>
+
+        <!-- OFFLINE CLIMATOLOGICAL RUNOFF PREDICTION METRICS -->
+        <div class="bg-[#fbf9f4] p-4 rounded-2xl border border-zinc-200 space-y-3 font-mono text-xs">
+          <div class="flex items-center justify-between border-b border-zinc-200/80 pb-2">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-zinc-900">Historical Hydrological Forecast Matrix</span>
+              <span id="predictionRiskBadge" class="px-2.5 py-0.5 rounded-full font-mono text-[10px] font-extrabold uppercase bg-rose-100 text-rose-800">CRITICAL</span>
+            </div>
+            <div id="predCloudburstText" class="font-bold text-rose-600 text-xs">Cloudburst Risk: 85%</div>
+          </div>
+
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-zinc-800">
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">24h Projected Rain</div>
+              <div id="pred24hRainText" class="text-sm font-bold text-cyan-700 mt-0.5">212.4 mm</div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">Simulated Rain Rate</div>
+              <div id="predRainRateText" class="text-sm font-bold text-rose-600 mt-0.5">142.5 mm/h</div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">7-Day Projected Total</div>
+              <div id="pred7dRainText" class="text-sm font-bold text-zinc-900 mt-0.5">385.0 mm</div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">Temperature & Humidity</div>
+              <div class="text-xs font-bold text-zinc-900 mt-0.5"><span id="predTempText">23.5 °C</span> • <span id="predHumidityText">RH: 88%</span></div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">Wind Vector</div>
+              <div id="predWindText" class="text-xs font-bold text-amber-700 mt-0.5">24 km/h SW</div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">Barometric Pressure</div>
+              <div id="predPressureText" class="text-xs font-bold text-zinc-900 mt-0.5">996.2 hPa</div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200 col-span-2">
+              <div class="flex items-center justify-between text-[10px] font-bold text-zinc-500">
+                <span>Flood Hazard Score</span>
+                <span id="predHazardScoreText" class="text-rose-600 font-black text-xs">88 %</span>
+              </div>
+              <div class="w-full bg-zinc-200 h-2 rounded-full overflow-hidden mt-1.5">
+                <div id="predHazardProgressBar" class="h-full bg-gradient-to-r from-amber-500 to-rose-600 rounded-full transition-all" style="width: 88%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-3 bg-white rounded-xl border border-zinc-200 text-xs leading-relaxed text-zinc-700">
+            <span class="font-bold text-zinc-900">NDMA Tactical Advisory: </span>
+            <span id="predAdvisoryText">🚨 Severe urban cloudburst inundating Koramangala & Vrishabhavathi stormwater channels. Evacuate low-lying underpasses.</span>
+          </div>
+        </div>
+
+        <!-- SEARCHABLE HISTORICAL MATRIX TABLE -->
+        <div class="space-y-3 pt-2">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h4 class="font-bold text-base font-display text-zinc-900">Karnataka 31 Districts Historical Hydrological Matrix</h4>
+              <p class="text-xs font-mono text-zinc-500">Pre-compiled baseline data for zero-connectivity disaster response.</p>
+            </div>
+            <input type="text" id="matrixSearchInput" oninput="renderHistoricalMatrixTable()" placeholder="Search district in matrix..." class="px-3 py-1.5 rounded-xl border border-zinc-300 bg-[#fbf9f4] font-mono text-xs w-64 focus:outline-none focus:ring-2 focus:ring-zinc-900">
+          </div>
+
+          <div class="overflow-x-auto rounded-2xl border border-zinc-200 max-h-72 overflow-y-auto">
+            <table class="w-full text-left font-mono text-xs border-collapse">
+              <thead class="bg-zinc-100 sticky top-0 border-b border-zinc-200 text-zinc-700 uppercase text-[10px]">
+                <tr>
+                  <th class="p-3">District</th>
+                  <th class="p-3">Category</th>
+                  <th class="p-3">Sept Mean Rain</th>
+                  <th class="p-3">Peak Rate</th>
+                  <th class="p-3">SCS Curve</th>
+                  <th class="p-3">Risk Tier</th>
+                  <th class="p-3">Action</th>
+                </tr>
+              </thead>
+              <tbody id="historicalMatrixTableBody" class="divide-y divide-zinc-100 bg-white"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BOTTOM SECTION: DISTRICTS TELEMETRY & DARK TASK CARD -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+      <!-- LEFT 2 COLS: KARNATAKA 31 DISTRICTS LIST -->
+      <div class="lg:col-span-2 cream-card p-6 space-y-5">
+        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200/80 pb-3">
+          <div>
+            <h3 class="text-lg font-bold font-display text-zinc-900">Karnataka 31 Districts Live Telemetry Matrix</h3>
+            <p class="text-xs font-mono text-zinc-500 mt-0.5">Executive Alert Summaries, Complete Atmospheric (6 Metrics) & Flood Telemetry (6 Metrics)</p>
+          </div>
+          <span class="text-xs font-mono px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full font-bold shadow-sm">31 DISTRICTS ACTIVE</span>
+        </div>
+
+        <div id="districtGridContainer" class="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <!-- Dynamically populated district cards -->
+        </div>
+      </div>
+
+      <!-- RIGHT DARK CARD WIDGET: KARNATAKA EMERGENCY TASKS & TRAUMA DISPATCH -->
+      <div class="dark-task-card p-6 space-y-4 flex flex-col justify-between" id="emergencyTasksCard">
+        <div class="space-y-3.5">
+          <div class="flex items-center justify-between pb-3 border-b border-zinc-800">
+            <div>
+              <h3 class="font-bold text-base font-display text-white flex items-center gap-2">
+                <span class="material-symbols-outlined text-amber-400 text-lg">medical_services</span>
+                Karnataka Emergency Tasks
+              </h3>
+              <p class="text-[10px] font-mono text-zinc-400 mt-0.5">Live Haversine GPS Scan & Trauma Routing</p>
+            </div>
+            <span id="emergencyTasksBadge" class="text-[10px] font-mono font-extrabold px-2.5 py-1 bg-amber-400/20 text-amber-300 border border-amber-400/40 rounded-full">
+              TOP 4 NEAREST
+            </span>
+          </div>
+
+          <!-- GPS SCAN TELEMETRY STRIP -->
+          <div class="p-2.5 rounded-xl bg-zinc-900/90 border border-zinc-800 flex items-center justify-between text-[11px] font-mono text-zinc-300">
+            <div class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+              <span id="emergencyGpsLiveStatus" class="font-bold text-zinc-200">GPS: Lat 13.1007, Lon 77.5963</span>
+            </div>
+            <span class="text-emerald-400 font-bold text-[10px] flex items-center gap-1">
+              <span class="material-symbols-outlined text-xs">offline_bolt</span>
+              100% OFFLINE
+            </span>
+          </div>
+
+          <!-- DYNAMIC HOSPITAL TASK CONTAINER (TOP 3-4 NEAREST) -->
+          <div id="emergencyHospitalsContainer" class="space-y-3 mt-3 font-mono text-xs">
+            <div class="p-4 rounded-xl bg-zinc-900/70 border border-zinc-800 text-center text-zinc-400 text-xs">
+              <span class="material-symbols-outlined text-xl text-cyan-400 animate-spin mb-1">sync</span>
+              <div>Scanning Karnataka trauma network...</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-zinc-800 space-y-2">
+          <button onclick="openEmergencySOSModal()" class="w-full py-3 rounded-2xl bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white font-mono text-xs font-extrabold shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer">
+            <span class="material-symbols-outlined text-base animate-pulse">emergency</span>
+            OPEN SOS EMERGENCY DISPATCH (3 CHANNELS)
+          </button>
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- HIGH-VISIBILITY 3-CHANNEL SOS EMERGENCY DISPATCH MODAL -->
+  <!-- ============================================================ -->
+  <div id="emergencySOSModal" class="fixed inset-0 bg-black/85 backdrop-blur-md z-50 hidden flex items-center justify-center p-4 overflow-y-auto" onclick="onSosModalBackdropClick(event)">
+    <div class="cream-card w-full max-w-3xl p-6 sm:p-8 space-y-6 bg-zinc-950 border-2 border-rose-500 shadow-[0_0_60px_rgba(225,29,72,0.45)] text-white relative my-8" onclick="event.stopPropagation()">
+      
+      <!-- TOP EMERGENCY BANNER & CLOSE -->
+      <div class="flex items-start justify-between border-b border-zinc-800 pb-4">
+        <div class="flex items-center gap-3.5">
+          <div class="w-12 h-12 rounded-2xl bg-rose-600/30 border border-rose-500 text-rose-500 flex items-center justify-center shrink-0 shadow-[0_0_20px_rgba(225,29,72,0.4)]">
+            <span class="material-symbols-outlined text-3xl animate-pulse">emergency</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-600 text-white font-extrabold uppercase tracking-wider animate-pulse">SOS TIER-1 DISPATCH</span>
+              <span class="text-[10px] font-mono text-zinc-400 font-semibold">KARNATAKA SDRF / NDRF COMMAND</span>
+            </div>
+            <h2 class="text-xl sm:text-2xl font-black font-display text-white mt-0.5 tracking-tight">
+              Emergency SOS Transmission Hub
+            </h2>
+            <p class="text-xs text-zinc-400 font-mono">
+              Tri-Channel Instant Dispatch • Direct Phone Call, WhatsApp Telemetry, & Offline GSM SMS
+            </p>
+          </div>
+        </div>
+        <button onclick="closeEmergencySOSModal()" class="w-9 h-9 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white transition-all shrink-0 cursor-pointer" title="Close Modal (Esc)">
+          <span class="material-symbols-outlined text-xl">close</span>
+        </button>
+      </div>
+
+      <!-- LIVE TELEMETRY STATUS BAR -->
+      <div class="bg-zinc-900/90 border border-zinc-800 rounded-2xl p-4 font-mono text-xs space-y-2.5">
+        <div class="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-zinc-800/80 text-[11px]">
+          <div class="flex items-center gap-2 text-emerald-400 font-bold">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+            <span id="sosGpsLockStatus">LIVE GPS LOCK ACQUIRED</span>
+          </div>
+          <div class="text-zinc-400 flex items-center gap-1">
+            <span class="material-symbols-outlined text-sm text-zinc-500">schedule</span>
+            <span id="sosTelemetryTimestamp">--</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-zinc-300">
+          <div class="bg-zinc-950/80 p-3 rounded-xl border border-zinc-800/80">
+            <div class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">GPS Coordinates</div>
+            <div id="sosGpsCoords" class="text-xs font-bold text-white mt-1 font-mono truncate">13.1007, 77.5963</div>
+            <a id="sosGoogleMapsLink" href="https://www.google.com/maps?q=13.1007,77.5963" target="_blank" class="text-[10px] text-cyan-400 hover:text-cyan-300 hover:underline flex items-center gap-1 mt-1 font-mono">
+              <span class="material-symbols-outlined text-xs">open_in_new</span> Google Maps Pin
+            </a>
+          </div>
+
+          <div class="bg-zinc-950/80 p-3 rounded-xl border border-zinc-800/80">
+            <div class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">District & Zone</div>
+            <div id="sosDistrictName" class="text-xs font-bold text-amber-400 mt-1 font-display truncate">Bengaluru Urban</div>
+            <div id="sosRiskTier" class="text-[10px] text-rose-400 font-bold mt-1 font-mono">CRITICAL EMERGENCY</div>
+          </div>
+
+          <div class="bg-zinc-950/80 p-3 rounded-xl border border-zinc-800/80">
+            <div class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Live Flood Depth</div>
+            <div id="sosFloodDepth" class="text-xs font-bold text-rose-500 mt-1 font-mono truncate">850 mm (0.85 m)</div>
+            <div id="sosRiverStage" class="text-[10px] text-zinc-400 mt-1 truncate">Koramangala Overflow</div>
+          </div>
+
+          <div class="bg-zinc-950/80 p-3 rounded-xl border border-zinc-800/80">
+            <div class="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Live Weather</div>
+            <div id="sosWeatherRain" class="text-xs font-bold text-cyan-400 mt-1 font-mono truncate">142.5 mm/h Rain</div>
+            <div id="sosWeatherAtm" class="text-[10px] text-zinc-400 mt-1 truncate">23.5°C • 88% Hum • 996 hPa</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 3 COMMUNICATION CHANNELS (HIGH VISIBILITY ONE-CLICK ACTION CARDS) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        
+        <!-- CHANNEL 1: DIRECT PHONE CALL -->
+        <div class="bg-gradient-to-b from-rose-950/50 via-zinc-900 to-zinc-900 border-2 border-rose-600/60 hover:border-rose-500 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all shadow-lg">
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="w-11 h-11 rounded-xl bg-rose-600/30 text-rose-400 border border-rose-500/50 flex items-center justify-center shadow-[0_0_15px_rgba(225,29,72,0.3)]">
+                <span class="material-symbols-outlined text-2xl">phone_in_talk</span>
+              </span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-900/80 text-rose-200 font-black border border-rose-600/60">CHANNEL 1</span>
+            </div>
+            <div>
+              <h3 class="font-extrabold text-sm text-white font-display">Direct Phone Call</h3>
+              <p class="text-[11px] text-zinc-400 mt-1 leading-snug">
+                Cellular voice patch to SDRF & National Command. Guaranteed 0% data reliance.
+              </p>
+            </div>
+          </div>
+
+          <div class="space-y-2 pt-2 border-t border-zinc-800/80">
+            <a href="tel:9148019519" onclick="triggerCallSOS('9148019519')" class="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-black flex items-center justify-center gap-2 shadow-lg hover:shadow-rose-600/40 transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-base">call</span>
+              CALL SDRF: 9148019519
+            </a>
+            <a href="tel:112" onclick="triggerCallSOS('112')" class="w-full py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-rose-400 hover:text-rose-300 border border-zinc-700 font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-base">emergency</span>
+              CALL 112 (NATIONAL)
+            </a>
+          </div>
+        </div>
+
+        <!-- CHANNEL 2: WHATSAPP REDIRECTION -->
+        <div class="bg-gradient-to-b from-emerald-950/50 via-zinc-900 to-zinc-900 border-2 border-emerald-600/60 hover:border-emerald-500 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all shadow-lg">
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="w-11 h-11 rounded-xl bg-emerald-600/30 text-emerald-400 border border-emerald-500/50 flex items-center justify-center shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                <span class="material-symbols-outlined text-2xl">chat</span>
+              </span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-900/80 text-emerald-200 font-black border border-emerald-600/60">CHANNEL 2</span>
+            </div>
+            <div>
+              <h3 class="font-extrabold text-sm text-white font-display">WhatsApp Redirection</h3>
+              <p class="text-[11px] text-zinc-400 mt-1 leading-snug">
+                Pre-filled with exact GPS coords, Google Maps pin, live depth & weather telemetry.
+              </p>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-zinc-800/80 space-y-1.5">
+            <button onclick="triggerWhatsAppSOS()" class="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-xs font-black flex items-center justify-center gap-2 shadow-lg hover:shadow-emerald-600/40 transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-base">send</span>
+              WHATSAPP SOS DISPATCH
+            </button>
+            <div class="text-[10px] text-emerald-400/90 font-mono text-center truncate">
+              wa.me/919148019519
+            </div>
+          </div>
+        </div>
+
+        <!-- CHANNEL 3: OFFLINE GSM SMS -->
+        <div class="bg-gradient-to-b from-blue-950/50 via-zinc-900 to-zinc-900 border-2 border-blue-600/60 hover:border-blue-500 rounded-2xl p-5 flex flex-col justify-between space-y-4 transition-all shadow-lg">
+          <div class="space-y-2.5">
+            <div class="flex items-center justify-between">
+              <span class="w-11 h-11 rounded-xl bg-blue-600/30 text-blue-400 border border-blue-500/50 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.3)]">
+                <span class="material-symbols-outlined text-2xl">sms</span>
+              </span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-blue-900/80 text-blue-200 font-black border border-blue-600/60">CHANNEL 3</span>
+            </div>
+            <div>
+              <h3 class="font-extrabold text-sm text-white font-display">Offline GSM SMS Intent</h3>
+              <p class="text-[11px] text-zinc-400 mt-1 leading-snug">
+                Zero data required. Triggers cellular SMS (sms:9148019519) + IndexedDB offline queue.
+              </p>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-zinc-800/80 space-y-1.5">
+            <button onclick="triggerSmsSOS()" class="w-full py-2.5 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-mono text-xs font-black flex items-center justify-center gap-2 shadow-lg hover:shadow-blue-600/40 transition-all cursor-pointer">
+              <span class="material-symbols-outlined text-base">send_to_mobile</span>
+              DISPATCH GSM SMS
+            </button>
+            <div class="text-[10px] text-blue-400/90 font-mono text-center truncate">
+              sms:9148019519?body=...
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- MASTER ONE-CLICK TRIGGER (BROADCAST ALL 3 CHANNELS) -->
+      <div class="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-rose-950/90 via-red-950/70 to-amber-950/90 border-2 border-rose-500/70 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl">
+        <div class="space-y-1 text-center sm:text-left">
+          <div class="font-black text-sm text-white flex items-center justify-center sm:justify-start gap-2">
+            <span class="material-symbols-outlined text-rose-500 text-xl animate-bounce">warning</span>
+            <span>Simultaneous 3-Channel Emergency Broadcast</span>
+          </div>
+          <div class="text-xs text-zinc-300 font-mono">
+            Launches WhatsApp pre-filled telemetry + dispatches GSM SMS intent + triggers SDRF cellular call.
+          </div>
+        </div>
+        <button onclick="triggerAllChannelsSOS()" class="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-rose-600 via-red-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-mono text-xs font-black shadow-2xl flex items-center justify-center gap-2.5 transition-all shrink-0 ring-2 ring-rose-400 ring-offset-2 ring-offset-zinc-950 cursor-pointer">
+          <span class="material-symbols-outlined text-xl">campaign</span>
+          BROADCAST ALL 3 CHANNELS
+        </button>
+      </div>
+
+      <!-- PRE-FILLED DISPATCH PAYLOAD PREVIEW -->
+      <div class="space-y-2">
+        <div class="flex items-center justify-between text-xs font-mono text-zinc-400">
+          <span class="flex items-center gap-1.5 font-bold text-zinc-200">
+            <span class="material-symbols-outlined text-sm text-cyan-400">terminal</span>
+            PRE-FILLED TELEMETRY PAYLOAD PREVIEW
+          </span>
+          <button onclick="copyEmergencyTelemetryToClipboard()" class="hover:text-white flex items-center gap-1 text-[11px] bg-zinc-900 hover:bg-zinc-800 px-3 py-1 rounded-lg border border-zinc-700 cursor-pointer transition-all">
+            <span class="material-symbols-outlined text-xs">content_copy</span>
+            <span id="copySosBtnText">Copy Payload</span>
+          </button>
+        </div>
+        <pre id="sosPayloadPreviewBox" class="bg-zinc-900/90 border border-zinc-800 p-3.5 rounded-xl font-mono text-[11px] text-zinc-300 whitespace-pre-wrap break-all max-h-36 overflow-y-auto select-text leading-relaxed">Generating live emergency telemetry payload...</pre>
+      </div>
+
+      <!-- FOOTER CLOSE & HOTKEY HINT -->
+      <div class="flex items-center justify-between pt-2 border-t border-zinc-800 text-[11px] font-mono text-zinc-500">
+        <div>Hotkeys: <kbd class="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-700 text-zinc-300">ESC</kbd> to dismiss</div>
+        <button onclick="closeEmergencySOSModal()" class="px-5 py-2 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-300 hover:text-white font-bold transition-all cursor-pointer">
+          DISMISS MODAL
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- NDMA COMPLIANCE REPORT PRINT MODAL -->
+  <div id="ndmaReportModal" class="fixed inset-0 bg-black/70 backdrop-blur-md z-50 hidden flex items-center justify-center p-4">
+    <div class="cream-card w-full max-w-2xl p-6 space-y-6 bg-white border border-zinc-300">
+      <div class="flex items-center justify-between border-b border-zinc-200 pb-4">
+        <div>
+          <h2 class="text-xl font-bold font-display text-zinc-900">NDMA Karnataka Compliance Emergency Report</h2>
+          <p class="text-xs font-mono text-zinc-500">Generated by JalRakshak AI (SIH Problem Statement: SIH26071)</p>
+        </div>
+        <button onclick="closeNDMAReportModal()" class="text-zinc-400 hover:text-zinc-900 no-print">
+          <span class="material-symbols-outlined text-2xl">close</span>
+        </button>
+      </div>
+
+      <div id="ndmaReportContent" class="space-y-4 font-mono text-xs text-zinc-800">
+        <!-- Dynamically generated NDMA text report -->
+      </div>
+
+      <div class="flex items-center justify-end gap-3 no-print pt-4 border-t border-zinc-200">
+        <button onclick="window.print()" class="px-5 py-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-white font-bold text-xs flex items-center gap-2">
+          <span class="material-symbols-outlined text-sm">print</span>
+          PRINT / SAVE PDF
+        </button>
+        <button onclick="closeNDMAReportModal()" class="px-4 py-2 rounded-full bg-zinc-200 hover:bg-zinc-300 text-zinc-800 font-bold text-xs">
+          CLOSE
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CORE LOGIC SCRIPT -->
+  <script src="app.js"></script>
+
+</body>
+</html>
