@@ -1720,7 +1720,7 @@ function renderSvgVectorOfflineMap() {
   const svgTacticalHtml = buildKarnatakaTacticalSvg();
   const svgBounds = L.latLngBounds(L.latLng(11.0, 73.0), L.latLng(19.0, 79.5));
   const svgOverlay = L.imageOverlay(
-    'data:image/svg+xml;base64,' + btoa(svgTacticalHtml),
+    'data:image/svg+xml;utf8,' + encodeURIComponent(svgTacticalHtml),
     svgBounds,
     { opacity: 0.95, interactive: false }
   );
