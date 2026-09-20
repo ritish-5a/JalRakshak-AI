@@ -106,9 +106,9 @@
         </div>
 
         <!-- PROMINENT HIGH-VISIBILITY SOS EMERGENCY BUTTON -->
-        <button onclick="openEmergencySOSModal()" class="px-3.5 py-1.5 rounded-full bg-rose-600 hover:bg-rose-700 text-white font-mono text-xs font-black flex items-center gap-1.5 transition-all shadow-lg shrink-0 border border-rose-500 animate-pulse cursor-pointer" title="Trigger Instant 3-Channel Emergency SOS">
+        <button onclick="openEmergencySOSModal()" class="px-4 py-2 rounded-full bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 shadow-[0_0_25px_rgba(225,29,72,0.65)] border-t border-white/40 ring-2 ring-rose-500 ring-offset-2 ring-offset-zinc-950 text-white font-mono text-xs font-black flex items-center gap-1.5 transition-all shrink-0 cursor-pointer btn-sos-glossy" title="Trigger Instant 3-Channel Emergency SOS">
           <span class="material-symbols-outlined text-base">emergency</span>
-          <span class="tracking-tight">SOS EMERGENCY</span>
+          <span class="tracking-tight font-black text-white">SOS EMERGENCY</span>
         </button>
 
         <!-- PROMINENT OFFLINE MODE TOGGLE BUTTON -->
@@ -167,9 +167,9 @@
 
       <div class="flex items-center gap-3">
         <!-- PROMINENT 3-CHANNEL SOS EMERGENCY TRIGGER BUTTON -->
-        <button onclick="openEmergencySOSModal()" class="px-5 py-2.5 rounded-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-mono text-xs font-black shadow-xl flex items-center gap-2 transition-all ring-2 ring-rose-400 ring-offset-2 hover:ring-rose-500 cursor-pointer">
-          <span class="material-symbols-outlined text-base animate-pulse">e911_emergency</span>
-          SOS EMERGENCY (3 CHANNELS)
+        <button onclick="openEmergencySOSModal()" class="px-5 py-2.5 rounded-full bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 shadow-[0_0_25px_rgba(225,29,72,0.65)] border-t border-white/40 ring-2 ring-rose-500 ring-offset-2 ring-offset-zinc-950 text-white font-mono text-xs font-black flex items-center gap-2 transition-all cursor-pointer btn-sos-glossy">
+          <span class="material-symbols-outlined text-base animate-pulse">emergency</span>
+          <span>SOS EMERGENCY (3 CHANNELS)</span>
         </button>
 
         <!-- SIMULATE CLOUDBURST BUTTON -->
@@ -217,16 +217,21 @@
 
         <!-- LOCATION ACTION CONTROLS: DETECT LIVE LOCATION + SET CITY/DISTRICT MANUAL PICKER -->
         <div class="space-y-2 pt-1 font-mono text-xs">
-          <button id="detectLiveLocationBtn" onclick="detectUserLiveLocation()" class="w-full py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white font-bold text-[11px] flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer">
-            <span id="detectGpsIcon" class="material-symbols-outlined text-sm">my_location</span>
+          <button id="detectLiveLocationBtn" onclick="detectUserLiveLocation()" class="w-full py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 active:scale-[0.98] text-white font-bold text-[11px] flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer border border-zinc-700">
+            <span id="detectGpsIcon" class="material-symbols-outlined text-sm text-cyan-400">my_location</span>
             <span id="detectGpsText">Detect Live Location</span>
           </button>
 
-          <div class="flex items-center gap-1.5">
-            <label for="userCityDistrictPicker" class="text-[10px] font-bold text-zinc-500 shrink-0">District:</label>
-            <select id="userCityDistrictPicker" onchange="setUserManualDistrict(this.value)" class="w-full py-1.5 px-2 rounded-xl bg-[#ece7db] hover:bg-[#e4ded0] border-none text-[11px] font-bold text-zinc-900 focus:outline-none focus:ring-2 focus:ring-zinc-900 cursor-pointer">
-              <option value="" disabled>-- Set My City / District --</option>
+          <div class="relative w-full">
+            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-cyan-400">
+              <span class="material-symbols-outlined text-sm">location_city</span>
+            </div>
+            <select id="userCityDistrictPicker" onchange="setUserManualDistrict(this.value)" class="w-full py-2 pl-9 pr-8 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-white text-[11px] font-bold border border-zinc-700 focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer appearance-none transition-all shadow-sm">
+              <option value="" disabled selected class="bg-zinc-900 text-zinc-400">📍 Select Karnataka District / Sector...</option>
             </select>
+            <div class="absolute inset-y-0 right-0 pr-2.5 flex items-center pointer-events-none text-zinc-400">
+              <span class="material-symbols-outlined text-sm">unfold_more</span>
+            </div>
           </div>
         </div>
       </div>
@@ -372,7 +377,7 @@
         </div>
 
         <!-- LEAFLET MAP ELEMENT -->
-        <div id="karnatakaMap" class="w-full flex-1 rounded-2xl z-0 border border-zinc-200"></div>
+        <div id="karnatakaMap" class="w-full flex-1 rounded-2xl z-0 border border-zinc-200 min-h-[440px]"></div>
       </div>
 
       <!-- ACOUSTIC SONIC HYDRO-DEPTH SCANNER CARD -->
@@ -552,13 +557,33 @@
         <div class="bg-[#fbf9f4] p-4 rounded-2xl border border-zinc-200 space-y-3 font-mono text-xs">
           <div class="flex items-center justify-between border-b border-zinc-200/80 pb-2">
             <div class="flex items-center gap-2">
-              <span class="font-bold text-zinc-900">Historical Hydrological Forecast Matrix</span>
+              <span class="font-bold text-zinc-900">Target District Baseline & Hydrological Forecast Matrix</span>
               <span id="predictionRiskBadge" class="px-2.5 py-0.5 rounded-full font-mono text-[10px] font-extrabold uppercase bg-rose-100 text-rose-800">CRITICAL</span>
             </div>
             <div id="predCloudburstText" class="font-bold text-rose-600 text-xs">Cloudburst Risk: 85%</div>
           </div>
 
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-zinc-800">
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">Baseline Climatological Rain</div>
+              <div id="predBaselineRainText" class="text-sm font-bold text-cyan-700 mt-0.5">212.4 mm</div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">SCS-CN Curve Number</div>
+              <div id="baseScsCnText" class="text-sm font-bold text-purple-700 mt-0.5">92 (Urban)</div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">Initial Abstraction (Ia) & S</div>
+              <div id="baseIaRetentionText" class="text-xs font-bold text-zinc-900 mt-0.5">Ia: 4.4mm | S: 22.1mm</div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">100-Yr Peak Discharge Flow</div>
+              <div id="basePeakDischargeText" class="text-sm font-bold text-rose-600 mt-0.5">420.5 m³/s</div>
+            </div>
+            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
+              <div class="text-[10px] text-zinc-500 font-bold">Soil Saturation Baseline</div>
+              <div id="baseSoilSatText" class="text-sm font-bold text-emerald-700 mt-0.5">94 %</div>
+            </div>
             <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
               <div class="text-[10px] text-zinc-500 font-bold">24h Projected Rain</div>
               <div id="pred24hRainText" class="text-sm font-bold text-cyan-700 mt-0.5">212.4 mm</div>
@@ -576,20 +601,108 @@
               <div class="text-xs font-bold text-zinc-900 mt-0.5"><span id="predTempText">23.5 °C</span> • <span id="predHumidityText">RH: 88%</span></div>
             </div>
             <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
-              <div class="text-[10px] text-zinc-500 font-bold">Wind Vector</div>
-              <div id="predWindText" class="text-xs font-bold text-amber-700 mt-0.5">24 km/h SW</div>
+              <div class="text-[10px] text-zinc-500 font-bold">Barometric Pressure & Wind</div>
+              <div class="text-xs font-bold text-amber-700 mt-0.5"><span id="predPressureText">996.2 hPa</span> • <span id="predWindText">24 km/h</span></div>
             </div>
-            <div class="bg-white p-2.5 rounded-xl border border-zinc-200">
-              <div class="text-[10px] text-zinc-500 font-bold">Barometric Pressure</div>
-              <div id="predPressureText" class="text-xs font-bold text-zinc-900 mt-0.5">996.2 hPa</div>
-            </div>
-            <div class="bg-white p-2.5 rounded-xl border border-zinc-200 col-span-2">
-              <div class="flex items-center justify-between text-[10px] font-bold text-zinc-500">
-                <span>Flood Hazard Score</span>
-                <span id="predHazardScoreText" class="text-rose-600 font-black text-xs">88 %</span>
+            <!-- FLOOD HAZARD SCORE HIGH-IMPACT ANIMATED VISUAL GAUGE (SIH26071 Issue 6 Fix) -->
+            <div id="predHazardCard" class="bg-white p-3.5 rounded-xl border border-zinc-200 col-span-2 sm:col-span-4 shadow-sm relative overflow-hidden transition-all duration-300">
+              <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 pb-2">
+                <div class="flex items-center gap-2">
+                  <span class="material-symbols-outlined text-base text-rose-500 animate-pulse">warning</span>
+                  <span class="text-xs font-extrabold text-zinc-900 uppercase tracking-wider">Flood Hazard Index & Extent Meter</span>
+                  <span id="predHazardLevelBadge" class="px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-100 text-rose-800 transition-all duration-300">Severe</span>
+                </div>
+                <div class="flex items-baseline gap-1">
+                  <span class="text-[10px] text-zinc-400 font-bold uppercase">Hazard Score:</span>
+                  <span id="predHazardScoreText" class="text-rose-600 font-black text-base md:text-lg transition-all duration-500 font-mono">88.0 %</span>
+                </div>
               </div>
-              <div class="w-full bg-zinc-200 h-2 rounded-full overflow-hidden mt-1.5">
-                <div id="predHazardProgressBar" class="h-full bg-gradient-to-r from-amber-500 to-rose-600 rounded-full transition-all" style="width: 88%"></div>
+
+              <!-- GAUGE VISUAL AREA: RADIAL SVG ARC & SEGMENTED LED RISK METER -->
+              <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center mt-3">
+                <!-- RADIAL SVG ARC GAUGE -->
+                <div class="md:col-span-4 flex flex-col items-center justify-center p-2 bg-zinc-50/80 rounded-lg border border-zinc-200/60">
+                  <div class="relative w-28 h-16 flex items-center justify-center">
+                    <svg class="w-full h-full" viewBox="0 0 100 55">
+                      <defs>
+                        <linearGradient id="hazardArcGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                          <stop offset="0%" stop-color="#10b981"/>
+                          <stop offset="40%" stop-color="#f59e0b"/>
+                          <stop offset="100%" stop-color="#e11d48"/>
+                        </linearGradient>
+                      </defs>
+                      <!-- Background Track Arc -->
+                      <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#e4e4e7" stroke-width="8" stroke-linecap="round"/>
+                      <!-- Dynamic Animated Arc -->
+                      <path id="predHazardArc" d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="url(#hazardArcGradient)" stroke-width="8" stroke-linecap="round" stroke-dasharray="125.66" stroke-dashoffset="15.08" class="transition-all duration-700 ease-out"/>
+                    </svg>
+                    <div class="absolute bottom-0 inset-x-0 text-center font-mono font-black text-xs text-rose-600" id="predHazardArcText">88.0%</div>
+                  </div>
+                  <span class="text-[9px] font-bold text-zinc-500 mt-1 uppercase tracking-tight">SCS-CN Runoff Arc</span>
+                </div>
+
+                <!-- SEGMENTED LED RISK METER & PROGRESS BAR -->
+                <div class="md:col-span-8 space-y-2">
+                  <div class="flex items-center justify-between text-[10px] font-bold text-zinc-500">
+                    <span>Segmented LED Risk Meter</span>
+                    <span id="predLedStatusText" class="text-rose-600 font-extrabold uppercase">8 / 10 LED Critical</span>
+                  </div>
+
+                  <!-- 10 LED SEGMENTS -->
+                  <div id="predLedMeter" class="flex gap-1 items-center">
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-emerald-500 shadow-sm" title="0-10%"></div>
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-emerald-500 shadow-sm" title="10-20%"></div>
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-emerald-500 shadow-sm" title="20-30%"></div>
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-amber-500 shadow-sm" title="30-40%"></div>
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-amber-500 shadow-sm" title="40-50%"></div>
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-amber-500 shadow-sm" title="50-60%"></div>
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-rose-500 shadow-sm" title="60-70%"></div>
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-rose-600 shadow-sm animate-pulse" title="70-80%"></div>
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-rose-600 shadow-sm animate-pulse" title="80-90%"></div>
+                    <div class="h-2.5 flex-1 rounded-sm transition-all duration-300 bg-zinc-200/80" title="90-100%"></div>
+                  </div>
+
+                  <!-- GLOWING MULTI-SEGMENT COLOR PROGRESS BAR WITH SHIMMER -->
+                  <div class="relative w-full bg-zinc-200/80 h-3.5 rounded-full overflow-hidden border border-zinc-300/60 shadow-inner mt-2">
+                    <div id="predHazardProgressBar" class="h-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-600 rounded-full transition-all duration-700 ease-out animate-pulse relative shadow-sm" style="width: 88%">
+                      <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 to-transparent animate-hazard-shimmer"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ANIMATED THREAT EXTENT MARKERS -->
+              <div class="relative w-full pt-4 pb-1 mt-1 font-mono text-[9px] font-bold text-zinc-500 border-t border-zinc-100">
+                <div class="flex items-center justify-between relative">
+                  <!-- 0% Safe -->
+                  <div id="extentMarker0" class="flex flex-col items-start transition-all duration-300 opacity-100">
+                    <div class="flex items-center gap-1">
+                      <span class="w-2 h-2 rounded-full bg-emerald-500 shadow-sm"></span>
+                      <span class="text-emerald-700 font-extrabold">0% Safe</span>
+                    </div>
+                  </div>
+                  <!-- 35% Moderate Inundation -->
+                  <div id="extentMarker35" class="flex flex-col items-center transition-all duration-300 opacity-100">
+                    <div class="flex items-center gap-1">
+                      <span class="w-2 h-2 rounded-full bg-amber-500 shadow-sm"></span>
+                      <span class="text-amber-700 font-extrabold">35% Mod. Inundation</span>
+                    </div>
+                  </div>
+                  <!-- 70% Severe Overflow -->
+                  <div id="extentMarker70" class="flex flex-col items-center transition-all duration-300 opacity-100">
+                    <div class="flex items-center gap-1">
+                      <span id="extentDot70" class="w-2 h-2 rounded-full bg-orange-500 shadow-sm"></span>
+                      <span id="extentText70" class="text-orange-700 font-extrabold">70% Severe Overflow</span>
+                    </div>
+                  </div>
+                  <!-- 90%+ Cloudburst Hazard -->
+                  <div id="extentMarker90" class="flex flex-col items-end transition-all duration-300 opacity-60">
+                    <div class="flex items-center gap-1">
+                      <span id="extentDot90" class="w-2 h-2 rounded-full bg-rose-600 shadow-sm"></span>
+                      <span id="extentText90" class="text-rose-700">90%+ Cloudburst Hazard</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -686,9 +799,9 @@
         </div>
 
         <div class="pt-3 border-t border-zinc-800 space-y-2">
-          <button onclick="openEmergencySOSModal()" class="w-full py-3 rounded-2xl bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white font-mono text-xs font-extrabold shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer">
+          <button onclick="openEmergencySOSModal()" class="w-full py-3 rounded-2xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 shadow-[0_0_25px_rgba(225,29,72,0.65)] border-t border-white/40 ring-2 ring-rose-500 ring-offset-2 ring-offset-zinc-950 text-white font-mono text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer btn-sos-glossy">
             <span class="material-symbols-outlined text-base animate-pulse">emergency</span>
-            OPEN SOS EMERGENCY DISPATCH (3 CHANNELS)
+            <span>OPEN SOS EMERGENCY DISPATCH (3 CHANNELS)</span>
           </button>
         </div>
       </div>
@@ -790,13 +903,13 @@
           </div>
 
           <div class="space-y-2 pt-2 border-t border-zinc-800/80">
-            <a href="tel:9148019519" onclick="triggerCallSOS('9148019519')" class="w-full py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-mono text-xs font-black flex items-center justify-center gap-2 shadow-lg hover:shadow-rose-600/40 transition-all cursor-pointer">
+            <a href="tel:9148019519" onclick="triggerCallSOS('9148019519')" class="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 shadow-[0_0_25px_rgba(225,29,72,0.65)] border-t border-white/40 ring-2 ring-rose-500 ring-offset-2 ring-offset-zinc-950 text-white font-mono text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer btn-sos-glossy">
               <span class="material-symbols-outlined text-base">call</span>
-              CALL SDRF: 9148019519
+              <span>CALL SDRF: 9148019519</span>
             </a>
-            <a href="tel:112" onclick="triggerCallSOS('112')" class="w-full py-2 px-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 text-rose-400 hover:text-rose-300 border border-zinc-700 font-mono text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer">
+            <a href="tel:112" onclick="triggerCallSOS('112')" class="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 shadow-[0_0_20px_rgba(225,29,72,0.65)] border-t border-white/40 ring-2 ring-rose-500 ring-offset-2 ring-offset-zinc-950 text-white font-mono text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer btn-sos-glossy">
               <span class="material-symbols-outlined text-base">emergency</span>
-              CALL 112 (NATIONAL)
+              <span>CALL 112 (NATIONAL)</span>
             </a>
           </div>
         </div>
@@ -870,9 +983,9 @@
             Launches WhatsApp pre-filled telemetry + dispatches GSM SMS intent + triggers SDRF cellular call.
           </div>
         </div>
-        <button onclick="triggerAllChannelsSOS()" class="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-rose-600 via-red-600 to-amber-600 hover:from-rose-500 hover:to-amber-500 text-white font-mono text-xs font-black shadow-2xl flex items-center justify-center gap-2.5 transition-all shrink-0 ring-2 ring-rose-400 ring-offset-2 ring-offset-zinc-950 cursor-pointer">
-          <span class="material-symbols-outlined text-xl">campaign</span>
-          BROADCAST ALL 3 CHANNELS
+        <button onclick="triggerAllChannelsSOS()" class="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-rose-600 via-red-600 to-rose-700 shadow-[0_0_25px_rgba(225,29,72,0.65)] border-t border-white/40 ring-2 ring-rose-500 ring-offset-2 ring-offset-zinc-950 text-white font-mono text-xs font-black flex items-center justify-center gap-2.5 transition-all shrink-0 cursor-pointer btn-sos-glossy">
+          <span class="material-symbols-outlined text-xl animate-pulse">campaign</span>
+          <span>BROADCAST ALL 3 CHANNELS</span>
         </button>
       </div>
 

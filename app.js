@@ -913,6 +913,10 @@ let analyserNode = null;
 let sonicAnimFrameId = null;
 let isOfflineCrisisMode = false;
 let liveGpsWatchId = null;
+let isWeatherSyncing = false;
+let openMeteoLastSyncTime = null;
+let openMeteoSyncCountdown = 120;
+let openMeteoSyncInterval = null;
 
 // INITIALIZE APP
 document.addEventListener('DOMContentLoaded', () => {
@@ -935,6 +939,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize Offline Vector Map Canvas & Weather Engine
   initOfflineVectorMapAndWeatherEngine();
+
+  // Start Open-Meteo 120s Auto-Sync Engine
+  initOpenMeteoAutoSyncEngine();
 });
 
 // SERVICE WORKER REGISTRATION
@@ -1186,12 +1193,12 @@ function initKarnatakaMap() {
       tile.width = size.x;
       tile.height = size.y;
       const ctx = tile.getContext('2d');
-      ctx.fillStyle = '#060b13';
+      ctx.fillStyle = '#0f172a';
       ctx.fillRect(0, 0, size.x, size.y);
-      ctx.strokeStyle = '#0f172a';
+      ctx.strokeStyle = '#1e293b';
       ctx.lineWidth = 1;
       ctx.strokeRect(0, 0, size.x, size.y);
-      ctx.strokeStyle = '#1e293b';
+      ctx.strokeStyle = '#334155';
       ctx.lineWidth = 0.8;
       ctx.setLineDash([3, 5]);
       ctx.beginPath();
@@ -1199,9 +1206,9 @@ function initKarnatakaMap() {
       ctx.moveTo(0, size.y / 2); ctx.lineTo(size.x, size.y / 2);
       ctx.stroke();
       ctx.setLineDash([]);
-      ctx.fillStyle = '#1e293b';
-      ctx.font = '8px monospace';
-      ctx.fillText(`WGS84 z${coords.z}`, 6, 12);
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = '10px monospace';
+      ctx.fillText(`WGS84 z${coords.z}`, 8, 14);
       return tile;
     }
   });
@@ -1251,17 +1258,108 @@ function initKarnatakaMap() {
     setBaseMapLayer('carto');
   }
 
-  // Initial Open-Meteo Weather API Fetch across Karnataka
-  fetchOpenMeteoKarnatakaWeather(false);
+  // Initial Open-Meteo Weather API Fetch across Karnataka via Auto-Sync Engine
+}
+
+// SCS-CN RUNOFF & INUNDATION DEPTH CALCULATOR
+function calculateFloodDepthSCSCN(district, rainMmHr, weatherCode) {
+  const matrixData = typeof KARNATAKA_HISTORICAL_MATRIX !== 'undefined'
+    ? KARNATAKA_HISTORICAL_MATRIX.find(m => m.id === district.id || m.name.toLowerCase() === district.name.toLowerCase())
+    : null;
+  const cn = district.scs_cn_curve || (matrixData ? matrixData.scs_cn_curve : 80);
+  
+  // SCS Potential Maximum Retention S (mm)
+  const S = (25400 / cn) - 254;
+  // Initial Abstraction Ia = 0.2 * S (mm)
+  const Ia = 0.2 * S;
+  const P = rainMmHr;
+  
+  // Direct Runoff Q (mm)
+  let Q = 0;
+  if (P > Ia) {
+    Q = Math.pow(P - Ia, 2) / (P + 0.8 * S);
+  } else if (P > 0) {
+    Q = 0.05 * P;
+  }
+  
+  // Exact inundation depth (flood_depth_mm) pooling in low-lying depressions
+  let floodDepthMm = 0;
+  if (P > 0) {
+    floodDepthMm = Math.round(Q * 7.5 + P * 1.2);
+  } else {
+    floodDepthMm = 0;
+  }
+
+  let risk = "SAFE";
+  if (rainMmHr >= 100 || weatherCode >= 95 || floodDepthMm >= 600) {
+    risk = "CRITICAL";
+  } else if (rainMmHr >= 40 || weatherCode >= 80 || floodDepthMm >= 200) {
+    risk = "WARNING";
+  }
+
+  let riverStage = `${district.name} Basin Normal (+0.4m)`;
+  if (risk === "CRITICAL") {
+    riverStage = `${district.name} Catchment Surge (+${(2.0 + (floodDepthMm / 500)).toFixed(1)}m Danger)`;
+  } else if (risk === "WARNING") {
+    riverStage = `${district.name} Flow (+${(1.0 + (floodDepthMm / 600)).toFixed(1)}m Warning)`;
+  }
+
+  return {
+    flood_depth_mm: floodDepthMm,
+    risk: risk,
+    river_stage: riverStage,
+    scs_cn: cn,
+    scs_runoff_q: parseFloat(Q.toFixed(2))
+  };
+}
+
+// UPDATE ALL UI COMPONENTS ON EVERY WEATHER SYNC CYCLE
+function updateAllWeatherUIComponents() {
+  // 1. Hero Counters (Max rainfall rate and max inundation depth across Karnataka)
+  let maxRainRate = 0;
+  let maxFloodDepth = 0;
+  KARNATAKA_DISTRICTS.forEach(d => {
+    if ((d.rain_mm_hr || 0) > maxRainRate) maxRainRate = d.rain_mm_hr;
+    if ((d.flood_depth_mm || 0) > maxFloodDepth) maxFloodDepth = d.flood_depth_mm;
+  });
+  const elRain = document.getElementById('statRainfall');
+  const elDepth = document.getElementById('statDepth');
+  if (elRain) elRain.textContent = maxRainRate.toFixed(1);
+  if (elDepth) elDepth.textContent = maxFloodDepth.toString();
+
+  // 2. District Grid Cards
+  renderDistrictGrid(KARNATAKA_DISTRICTS);
+
+  // 3. Active District for Water Elevation Gauge & SOS Telemetry
+  const activeDistrictId = (typeof userLocationState !== 'undefined' && userLocationState.districtId)
+    ? userLocationState.districtId
+    : KARNATAKA_DISTRICTS[0].id;
+  const currentDistrict = KARNATAKA_DISTRICTS.find(d => d.id === activeDistrictId) || KARNATAKA_DISTRICTS[0];
+
+  // 4. Water Elevation Gauge
+  updateWaterElevationGauge(currentDistrict);
+
+  // 5. SOS Modal Telemetry
+  updateLiveSosTelemetryData(currentDistrict);
+
+  // 6. Map Overlays (Leaflet, SVG, Canvas)
+  renderWeatherMapLayers();
+  renderSvgVectorOfflineMap();
+  if (typeof drawOfflineVectorCanvasMap === 'function') drawOfflineVectorCanvasMap();
+
+  // 7. Update Live Countdown Badge UI
+  updateWeatherSyncBadgeUI();
 }
 
 // OPEN-METEO REAL-TIME WEATHER API INTEGRATION across Karnataka
 async function fetchOpenMeteoKarnatakaWeather(isManualTrigger = false) {
   if (isWeatherSyncing) return;
   isWeatherSyncing = true;
+  openMeteoSyncCountdown = 120; // reset 120s timer on sync cycle
 
   const btn = document.getElementById('syncWeatherBtn');
   if (btn) btn.innerHTML = `<span class="material-symbols-outlined text-xs animate-spin">sync</span> FETCHING...`;
+  updateWeatherSyncBadgeUI();
 
   if (!navigator.onLine) {
     if (isManualTrigger) {
@@ -1270,6 +1368,7 @@ async function fetchOpenMeteoKarnatakaWeather(isManualTrigger = false) {
     loadCachedWeatherOrFallback();
     isWeatherSyncing = false;
     if (btn) btn.innerHTML = `<span class="material-symbols-outlined text-xs">cloud_off</span> OFFLINE CACHE`;
+    updateWeatherSyncBadgeUI();
     return;
   }
 
@@ -1303,25 +1402,18 @@ async function fetchOpenMeteoKarnatakaWeather(isManualTrigger = false) {
           district.weather_code = weatherCode;
           district.weather_desc = getWeatherDetailsByCode(weatherCode, rainMmHr).condition;
 
-          if (rainMmHr >= 100 || weatherCode >= 95) {
-            district.risk = "CRITICAL";
-            district.flood_depth_mm = Math.max(district.flood_depth_mm || 600, Math.round(rainMmHr * 6.5));
-          } else if (rainMmHr >= 50 || weatherCode >= 80) {
-            district.risk = "WARNING";
-            district.flood_depth_mm = Math.max(district.flood_depth_mm || 200, Math.round(rainMmHr * 4.2));
-          } else {
-            district.risk = "SAFE";
-            district.flood_depth_mm = Math.min(district.flood_depth_mm || 100, Math.round(rainMmHr * 2.5 + 20));
-          }
+          // Calculate exact inundation depth (flood_depth_mm) from live rain rate using SCS-CN runoff formula
+          const scs = calculateFloodDepthSCSCN(district, rainMmHr, weatherCode);
+          district.flood_depth_mm = scs.flood_depth_mm;
+          district.risk = scs.risk;
+          district.river_stage = scs.river_stage;
+          district.scs_cn_curve = scs.scs_cn;
         }
       });
 
       openMeteoLastSyncTime = new Date();
       cacheOpenMeteoData(KARNATAKA_DISTRICTS);
-
-      renderDistrictGrid(KARNATAKA_DISTRICTS);
-      renderWeatherMapLayers();
-      updateWeatherSyncBadgeUI();
+      updateAllWeatherUIComponents();
 
       if (isManualTrigger) {
         showTopRightToast(
@@ -1340,7 +1432,9 @@ async function fetchOpenMeteoKarnatakaWeather(isManualTrigger = false) {
     }
   } finally {
     isWeatherSyncing = false;
+    openMeteoSyncCountdown = 120;
     if (btn) btn.innerHTML = `<span class="material-symbols-outlined text-xs">sync</span> 📡 OPEN-METEO SYNC`;
+    updateWeatherSyncBadgeUI();
   }
 }
 
@@ -1348,7 +1442,22 @@ function cacheOpenMeteoData(districts) {
   try {
     const payload = {
       timestamp: new Date().toISOString(),
-      districts: districts
+      districts: districts.map(d => ({
+        id: d.id,
+        name: d.name,
+        lat: d.lat,
+        lon: d.lon,
+        rain_mm_hr: d.rain_mm_hr,
+        flood_depth_mm: d.flood_depth_mm,
+        temp_c: d.temp_c,
+        humidity: d.humidity || d.humidity_pct,
+        wind_speed: d.wind_speed || d.wind_speed_kmh,
+        weather_code: d.weather_code,
+        weather_desc: d.weather_desc,
+        risk: d.risk,
+        river_stage: d.river_stage,
+        scs_cn_curve: d.scs_cn_curve
+      }))
     };
     localStorage.setItem('jalrakshak_openmeteo_cache', JSON.stringify(payload));
   } catch (e) {
@@ -1362,31 +1471,63 @@ function loadCachedWeatherOrFallback() {
     if (cached) {
       const parsed = JSON.parse(cached);
       if (parsed && Array.isArray(parsed.districts)) {
-        parsed.districts.forEach((cd, i) => {
-          if (KARNATAKA_DISTRICTS[i]) {
-            KARNATAKA_DISTRICTS[i].rain_mm_hr = cd.rain_mm_hr;
-            KARNATAKA_DISTRICTS[i].temp_c = cd.temp_c;
-            KARNATAKA_DISTRICTS[i].humidity = cd.humidity;
-            KARNATAKA_DISTRICTS[i].wind_speed = cd.wind_speed;
-            KARNATAKA_DISTRICTS[i].weather_code = cd.weather_code;
-            KARNATAKA_DISTRICTS[i].risk = cd.risk;
+        parsed.districts.forEach((cd) => {
+          const district = KARNATAKA_DISTRICTS.find(d => d.id === cd.id || d.name.toLowerCase() === cd.name.toLowerCase());
+          if (district) {
+            district.rain_mm_hr = cd.rain_mm_hr;
+            district.flood_depth_mm = cd.flood_depth_mm;
+            district.temp_c = cd.temp_c;
+            district.humidity = cd.humidity;
+            district.wind_speed = cd.wind_speed;
+            district.weather_code = cd.weather_code;
+            district.weather_desc = cd.weather_desc;
+            district.risk = cd.risk;
+            if (cd.river_stage) district.river_stage = cd.river_stage;
+            if (cd.scs_cn_curve) district.scs_cn_curve = cd.scs_cn_curve;
           }
         });
+        if (parsed.timestamp) {
+          openMeteoLastSyncTime = new Date(parsed.timestamp);
+        }
       }
+    } else {
+      updateDistrictsFromHistoricalMatrix();
     }
   } catch (e) {
     console.warn("Error reading cached weather:", e);
   }
-  renderDistrictGrid(KARNATAKA_DISTRICTS);
-  renderWeatherMapLayers();
+  updateAllWeatherUIComponents();
 }
 
 function updateWeatherSyncBadgeUI() {
   const badge = document.getElementById('weatherSyncBadge');
-  if (badge && openMeteoLastSyncTime) {
-    const timeStr = openMeteoLastSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    badge.textContent = `📡 Open-Meteo Live API Active (${timeStr})`;
+  if (badge) {
+    if (isWeatherSyncing) {
+      badge.textContent = `📡 Open-Meteo Live • Syncing live telemetry...`;
+    } else {
+      badge.textContent = `📡 Open-Meteo Live • Auto-syncing in ${openMeteoSyncCountdown}s`;
+    }
   }
+}
+
+// 120-SECOND (2-MINUTE) AUTOMATIC OPEN-METEO WEATHER SYNC ENGINE
+function initOpenMeteoAutoSyncEngine() {
+  if (openMeteoSyncInterval) clearInterval(openMeteoSyncInterval);
+  openMeteoSyncCountdown = 120;
+
+  // Initial fetch
+  fetchOpenMeteoKarnatakaWeather(false);
+
+  // 1-second interval ticker for live countdown display
+  openMeteoSyncInterval = setInterval(() => {
+    openMeteoSyncCountdown--;
+    if (openMeteoSyncCountdown <= 0) {
+      openMeteoSyncCountdown = 120;
+      fetchOpenMeteoKarnatakaWeather(false);
+    } else {
+      updateWeatherSyncBadgeUI();
+    }
+  }, 1000);
 }
 
 function renderWeatherMapLayers() {
@@ -1468,18 +1609,18 @@ function buildKarnatakaTacticalSvg() {
   for (let lat = 11; lat <= 19; lat++) {
     const y = latToY(lat);
     gridLines += `
-      <line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="#0f1f38" stroke-width="1.2" stroke-dasharray="4,4"/>
-      <text x="20" y="${y - 6}" fill="#0284c7" font-family="monospace" font-size="13" font-weight="bold" opacity="0.65">LAT ${lat}.00° N</text>
-      <text x="${w - 120}" y="${y - 6}" fill="#0284c7" font-family="monospace" font-size="13" font-weight="bold" opacity="0.65">LAT ${lat}.00° N</text>
+      <line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="#1e3a8a" stroke-width="1.2" stroke-dasharray="4,4" opacity="0.75"/>
+      <text x="20" y="${y - 6}" fill="#38bdf8" font-family="monospace" font-size="13" font-weight="bold">LAT ${lat}.00° N</text>
+      <text x="${w - 120}" y="${y - 6}" fill="#38bdf8" font-family="monospace" font-size="13" font-weight="bold">LAT ${lat}.00° N</text>
     `;
   }
   // Longitudes 73.0 to 79.5 (every 1.0°)
   for (let lon = 73; lon <= 79; lon++) {
     const x = lonToX(lon);
     gridLines += `
-      <line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="#0f1f38" stroke-width="1.2" stroke-dasharray="4,4"/>
-      <text x="${x + 6}" y="32" fill="#0284c7" font-family="monospace" font-size="13" font-weight="bold" opacity="0.65">LON ${lon}.00° E</text>
-      <text x="${x + 6}" y="${h - 18}" fill="#0284c7" font-family="monospace" font-size="13" font-weight="bold" opacity="0.65">LON ${lon}.00° E</text>
+      <line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="#1e3a8a" stroke-width="1.2" stroke-dasharray="4,4" opacity="0.75"/>
+      <text x="${x + 6}" y="32" fill="#38bdf8" font-family="monospace" font-size="13" font-weight="bold">LON ${lon}.00° E</text>
+      <text x="${x + 6}" y="${h - 18}" fill="#38bdf8" font-family="monospace" font-size="13" font-weight="bold">LON ${lon}.00° E</text>
     `;
   }
 
@@ -1495,12 +1636,12 @@ function buildKarnatakaTacticalSvg() {
     <svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="width:100%; height:100%;">
       <defs>
         <radialGradient id="tacticalBg" cx="50%" cy="50%" r="75%">
-          <stop offset="0%" stop-color="#081426"/>
-          <stop offset="60%" stop-color="#060c18"/>
-          <stop offset="100%" stop-color="#03070d"/>
+          <stop offset="0%" stop-color="#1e293b"/>
+          <stop offset="60%" stop-color="#0f172a"/>
+          <stop offset="100%" stop-color="#0b1329"/>
         </radialGradient>
         <pattern id="dotPattern" width="28" height="28" patternUnits="userSpaceOnUse">
-          <circle cx="2" cy="2" r="1.2" fill="#13253d" />
+          <circle cx="2" cy="2" r="1.5" fill="#334155" opacity="0.8" />
         </pattern>
         <filter id="cyanGlow" x="-20%" y="-20%" width="140%" height="140%">
           <feGaussianBlur stdDeviation="6" result="blur"/>
@@ -1511,7 +1652,7 @@ function buildKarnatakaTacticalSvg() {
         </filter>
       </defs>
 
-      <!-- Dark Tactical Background & Dotted Grid -->
+      <!-- Dark High-Contrast Tactical Background & Dotted Grid -->
       <rect width="${w}" height="${h}" fill="url(#tacticalBg)"/>
       <rect width="${w}" height="${h}" fill="url(#dotPattern)" opacity="0.75"/>
 
@@ -1541,31 +1682,31 @@ function buildKarnatakaTacticalSvg() {
         L ${lonToX(76.20)} ${latToY(11.95)}
         L ${lonToX(75.45)} ${latToY(12.70)}
         Z"
-        fill="#041226" fill-opacity="0.38" stroke="#0284c7" stroke-width="2.5" stroke-dasharray="6,4" opacity="0.85" filter="url(#cyanGlow)"
+        fill="#0284c7" fill-opacity="0.15" stroke="#06b6d4" stroke-width="2.5" stroke-dasharray="6,4" opacity="0.9" filter="url(#cyanGlow)"
       />
 
       <!-- Concentric Radar Range Rings - Bengaluru Command Center -->
-      <circle cx="${blrX}" cy="${blrY}" r="75" fill="none" stroke="#0284c7" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.45"/>
-      <circle cx="${blrX}" cy="${blrY}" r="150" fill="none" stroke="#0284c7" stroke-width="1" opacity="0.3"/>
-      <circle cx="${blrX}" cy="${blrY}" r="225" fill="none" stroke="#f59e0b" stroke-width="1" stroke-dasharray="6,4" opacity="0.25"/>
-      <circle cx="${blrX}" cy="${blrY}" r="300" fill="none" stroke="#e11d48" stroke-width="1" opacity="0.2"/>
+      <circle cx="${blrX}" cy="${blrY}" r="75" fill="none" stroke="#0284c7" stroke-width="1.2" stroke-dasharray="3,3" opacity="0.55"/>
+      <circle cx="${blrX}" cy="${blrY}" r="150" fill="none" stroke="#0284c7" stroke-width="1" opacity="0.4"/>
+      <circle cx="${blrX}" cy="${blrY}" r="225" fill="none" stroke="#f59e0b" stroke-width="1" stroke-dasharray="6,4" opacity="0.35"/>
+      <circle cx="${blrX}" cy="${blrY}" r="300" fill="none" stroke="#e11d48" stroke-width="1" opacity="0.3"/>
 
       <!-- Concentric Radar Range Rings - North Karnataka Command -->
-      <circle cx="${dwdX}" cy="${dwdY}" r="65" fill="none" stroke="#0284c7" stroke-width="1" stroke-dasharray="3,3" opacity="0.35"/>
-      <circle cx="${dwdX}" cy="${dwdY}" r="130" fill="none" stroke="#0284c7" stroke-width="0.8" opacity="0.25"/>
-      <circle cx="${dwdX}" cy="${dwdY}" r="200" fill="none" stroke="#f59e0b" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.2"/>
+      <circle cx="${dwdX}" cy="${dwdY}" r="65" fill="none" stroke="#0284c7" stroke-width="1" stroke-dasharray="3,3" opacity="0.45"/>
+      <circle cx="${dwdX}" cy="${dwdY}" r="130" fill="none" stroke="#0284c7" stroke-width="0.8" opacity="0.35"/>
+      <circle cx="${dwdX}" cy="${dwdY}" r="200" fill="none" stroke="#f59e0b" stroke-width="0.8" stroke-dasharray="4,4" opacity="0.3"/>
 
       <!-- HUD Telemetry Header & Markings -->
-      <rect x="40" y="45" width="520" height="76" rx="14" fill="#091322" fill-opacity="0.9" stroke="#1e3a5f" stroke-width="1.4"/>
+      <rect x="40" y="45" width="520" height="76" rx="14" fill="#0f172a" fill-opacity="0.95" stroke="#38bdf8" stroke-width="1.5"/>
       <text x="62" y="74" fill="#38bdf8" font-family="monospace" font-size="16" font-weight="bold" letter-spacing="1">KARNATAKA OFFLINE TACTICAL GIS</text>
-      <text x="62" y="94" fill="#94a3b8" font-family="monospace" font-size="11">COORDINATE GRID: LAT 11.0°N–19.0°N | LON 73.0°E–79.5°E</text>
-      <text x="62" y="110" fill="#10b981" font-family="monospace" font-size="10" font-weight="bold">● ZERO DATA DEPENDENCY • 31 DISTRICTS • HIGH-RES BASINS</text>
+      <text x="62" y="94" fill="#cbd5e1" font-family="monospace" font-size="11">COORDINATE GRID: LAT 11.0°N–19.0°N | LON 73.0°E–79.5°E</text>
+      <text x="62" y="110" fill="#34d399" font-family="monospace" font-size="10" font-weight="bold">● ZERO DATA DEPENDENCY • 31 DISTRICTS • HIGH-RES BASINS</text>
 
       <!-- Yelahanka & Rajankunte HUD Callout Marker -->
       <line x1="${lonToX(77.5963)}" y1="${latToY(13.1007)}" x2="${lonToX(77.5963) + 110}" y2="${latToY(13.1007) - 60}" stroke="#f59e0b" stroke-width="1.8" stroke-dasharray="3,3"/>
-      <rect x="${lonToX(77.5963) + 110}" y="${latToY(13.1007) - 88}" width="240" height="46" rx="8" fill="#1c1917" fill-opacity="0.92" stroke="#f59e0b" stroke-width="1.2"/>
+      <rect x="${lonToX(77.5963) + 110}" y="${latToY(13.1007) - 88}" width="240" height="46" rx="8" fill="#1e293b" fill-opacity="0.95" stroke="#f59e0b" stroke-width="1.4"/>
       <text x="${lonToX(77.5963) + 122}" y="${latToY(13.1007) - 68}" fill="#fbbf24" font-family="monospace" font-size="11" font-weight="bold">YELAHANKA & RAJANKUNTE</text>
-      <text x="${lonToX(77.5963) + 122}" y="${latToY(13.1007) - 52}" fill="#d6d3d1" font-family="monospace" font-size="9.5">HIGH-RES INUNDATION CATCHMENT</text>
+      <text x="${lonToX(77.5963) + 122}" y="${latToY(13.1007) - 52}" fill="#e2e8f0" font-family="monospace" font-size="9.5">HIGH-RES INUNDATION CATCHMENT</text>
     </svg>
   `;
 }
@@ -1600,7 +1741,7 @@ function renderSvgVectorOfflineMap() {
       name: "Rajankunte High-Resolution Flood Basin Zone",
       coords: KARNATAKA_DISTRICT_POLYGONS.rajankunte_zone,
       risk: "CRITICAL",
-      color: "#e11d48",
+      color: "#f43f5e",
       details: "Rajankunte Lake, Kakolu Catchment & Doddaballapur Highway Underpass Flood Plain"
     }
   ];
@@ -1609,8 +1750,8 @@ function renderSvgVectorOfflineMap() {
     const poly = L.polygon(z.coords, {
       color: z.color,
       fillColor: z.color,
-      fillOpacity: 0.28,
-      weight: 2.4,
+      fillOpacity: 0.32,
+      weight: 2.5,
       dashArray: '5, 5'
     });
     poly.bindPopup(`
@@ -1627,11 +1768,14 @@ function renderSvgVectorOfflineMap() {
     svgOfflineLayerGroup.addLayer(poly);
   });
 
-  // 3. Vector District Boundaries & Polygons for ALL 31 Karnataka Districts
+  // 3. Vector District Boundaries & Polygons for ALL 31 Karnataka Districts with Vibrant Fills and Bold White Labels
   KARNATAKA_DISTRICTS.forEach(d => {
     const isCrit = d.risk === 'CRITICAL';
     const isWarn = d.risk === 'WARNING';
-    const nodeColor = isCrit ? '#e11d48' : isWarn ? '#f59e0b' : '#10b981';
+    
+    // Bright vibrant high-contrast colors
+    const strokeColor = isCrit ? '#fb7185' : isWarn ? '#fcd34d' : '#6ee7b7';
+    const fillColor = isCrit ? '#f43f5e' : isWarn ? '#f59e0b' : '#10b981';
 
     let coords = KARNATAKA_DISTRICT_POLYGONS[d.id];
     if (!coords || coords.length < 3) {
@@ -1647,28 +1791,35 @@ function renderSvgVectorOfflineMap() {
     }
 
     const districtPoly = L.polygon(coords, {
-      color: nodeColor,
-      fillColor: nodeColor,
-      fillOpacity: 0.18,
-      weight: 1.6,
+      color: strokeColor,
+      fillColor: fillColor,
+      fillOpacity: 0.35,
+      weight: 2.0,
       dashArray: isCrit ? '4, 4' : null
     });
 
+    // Permanent Bold White District Name Labels
+    districtPoly.bindTooltip(`<span class="vector-district-name">${d.name}</span>`, {
+      permanent: true,
+      direction: 'center',
+      className: 'vector-district-tooltip'
+    });
+
     districtPoly.on('mouseover', function() {
-      this.setStyle({ fillOpacity: 0.38, weight: 2.5 });
+      this.setStyle({ fillOpacity: 0.55, weight: 3.0 });
     });
     districtPoly.on('mouseout', function() {
-      this.setStyle({ fillOpacity: 0.18, weight: 1.6 });
+      this.setStyle({ fillOpacity: 0.35, weight: 2.0 });
     });
 
     districtPoly.bindPopup(`
       <div style="font-family: 'JetBrains Mono', monospace; padding: 4px; min-width: 220px;">
         <div style="font-size: 13px; font-weight: bold; color: #18181b;">📍 ${d.name} Vector District</div>
-        <div style="font-size: 10px; color: #64748b; margin-top:2px;">Category: <b>${d.category.toUpperCase()}</b> | Risk: <b style="color:${nodeColor}">${d.risk}</b></div>
+        <div style="font-size: 10px; color: #64748b; margin-top:2px;">Category: <b>${d.category.toUpperCase()}</b> | Risk: <b style="color:${fillColor}">${d.risk}</b></div>
         <div style="font-size: 10px; color: #334155; margin-top:4px; line-height: 1.4;">
           • Rainfall Rate: <b>${d.rain_mm_hr} mm/h</b><br>
           • 24h Rainfall: <b>${d.precip_24h_mm || 0} mm</b><br>
-          • Flood Depth: <b style="color:${nodeColor}">${d.flood_depth_mm} mm</b><br>
+          • Flood Depth: <b style="color:${fillColor}">${d.flood_depth_mm} mm</b><br>
           • River / Basin Stage: <b>${d.river_stage}</b>
         </div>
       </div>
@@ -1677,23 +1828,23 @@ function renderSvgVectorOfflineMap() {
 
     // Centroid Node Marker
     const circleMarker = L.circleMarker([d.lat, d.lon], {
-      radius: isCrit ? 6 : 4.5,
-      color: nodeColor,
-      fillColor: nodeColor,
-      fillOpacity: 0.9,
-      weight: 1.8
+      radius: isCrit ? 6.5 : 5,
+      color: strokeColor,
+      fillColor: fillColor,
+      fillOpacity: 0.95,
+      weight: 2.0
     });
-    circleMarker.bindPopup(`<b>${d.name}</b><br>Risk: <b style="color:${nodeColor}">${d.risk}</b><br>Rainfall: ${d.rain_mm_hr} mm/h | Flood Depth: ${d.flood_depth_mm} mm`);
+    circleMarker.bindPopup(`<b>${d.name}</b><br>Risk: <b style="color:${fillColor}">${d.risk}</b><br>Rainfall: ${d.rain_mm_hr} mm/h | Flood Depth: ${d.flood_depth_mm} mm`);
     svgOfflineLayerGroup.addLayer(circleMarker);
   });
 
-  // 4. Vector Rivers & Stormwater Drains Layer
+  // 4. Vector Rivers & Stormwater Drains Layer (Glowing Cyan Rivers)
   VECTOR_RIVERS.forEach(river => {
-    const isYelahankaDrains = river.name.includes("Yelahanka");
+    const isYelahankaDrains = river.name.includes("Yelahanka") || river.name.includes("Stormwater");
     const riverPolyline = L.polyline(river.coords, {
-      color: river.color || '#0284c7',
-      weight: isYelahankaDrains ? 4 : 3.2,
-      opacity: 0.9,
+      color: river.color || '#00f2fe',
+      weight: isYelahankaDrains ? 4.5 : 3.5,
+      opacity: 0.95,
       smoothFactor: 1.0,
       dashArray: isYelahankaDrains ? '6, 4' : null
     });
@@ -1707,7 +1858,35 @@ function renderSvgVectorOfflineMap() {
     svgOfflineLayerGroup.addLayer(riverPolyline);
   });
 
-  // 5. Add Flood Polygons into svgOfflineLayerGroup
+  // 5. Yelahanka & Rajankunte Lake Chains (High-Contrast Cyan Lake Features)
+  const YELAHANKA_LAKE_CHAINS = [
+    { name: "Yelahanka Kere (Lake)", lat: 13.1007, lon: 77.5963, radius: 450, depth: "4.2m", status: "Critical Storage 92%" },
+    { name: "Puttenahalli Lake Sanctuary", lat: 13.1200, lon: 77.5880, radius: 380, depth: "3.5m", status: "Overflowing into SWD Corridor" },
+    { name: "Rajankunte Flood Basin Lake", lat: 13.1820, lon: 77.5680, radius: 520, depth: "5.1m", status: "Inundation Zone Active" },
+    { name: "Jakkur Lake Water Reservoir", lat: 13.0750, lon: 77.6150, radius: 480, depth: "4.8m", status: "High Storage 88%" },
+    { name: "Attur Lake Wetland Basin", lat: 13.0980, lon: 77.5720, radius: 320, depth: "2.9m", status: "Active Catchment Drain" }
+  ];
+
+  YELAHANKA_LAKE_CHAINS.forEach(lake => {
+    const lakeCircle = L.circle([lake.lat, lake.lon], {
+      radius: lake.radius,
+      color: '#38bdf8',
+      fillColor: '#0284c7',
+      fillOpacity: 0.65,
+      weight: 2.2
+    });
+    lakeCircle.bindPopup(`
+      <div style="font-family: 'JetBrains Mono', monospace; padding: 4px;">
+        <b style="font-size: 12px; color: #0284c7;">🏞️ VECTOR LAKE CHAIN: ${lake.name}</b><br>
+        • Depth: <b>${lake.depth}</b><br>
+        • Status: <b style="color:#0284c7;">${lake.status}</b><br>
+        <span style="font-size:10px; color:#059669; font-weight:bold;">100% Offline Hydrological Reservoir</span>
+      </div>
+    `);
+    svgOfflineLayerGroup.addLayer(lakeCircle);
+  });
+
+  // 6. Add Flood Polygons into svgOfflineLayerGroup
   addFloodPolygons();
   if (floodPolygonGroup) {
     floodPolygonGroup.eachLayer(layer => {
@@ -1715,7 +1894,7 @@ function renderSvgVectorOfflineMap() {
     });
   }
 
-  // 6. Add Hospital Pins into svgOfflineLayerGroup
+  // 7. Add Hospital Pins into svgOfflineLayerGroup
   addHospitalMarkers();
   if (hospitalLayerGroup) {
     hospitalLayerGroup.eachLayer(layer => {
@@ -1723,27 +1902,39 @@ function renderSvgVectorOfflineMap() {
     });
   }
 
-  // 7. User GPS Marker Vector Rendering
+  // 8. User GPS Marker Vector Rendering (Always visible in vector offline mode)
   if (userCoordinates) {
-    const userGpsVectorMarker = L.circleMarker([userCoordinates.lat, userCoordinates.lon], {
-      radius: 9,
-      color: '#0284c7',
-      fillColor: '#0284c7',
-      fillOpacity: 1.0,
-      weight: 3
+    const pulsingIcon = L.divIcon({
+      className: 'custom-gps-pin',
+      html: `
+        <div class="pulsing-gps-marker" title="Your Live GPS Position">
+          <div class="pulsing-gps-ring-outer"></div>
+          <div class="pulsing-gps-ring"></div>
+          <div class="pulsing-gps-dot"></div>
+        </div>
+      `,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    const userGpsVectorMarker = L.marker([userCoordinates.lat, userCoordinates.lon], {
+      icon: pulsingIcon,
+      zIndexOffset: 2500
     });
 
     const userPulseRing = L.circle([userCoordinates.lat, userCoordinates.lon], {
-      radius: 1500,
+      radius: userLocationState.accuracy || 500,
       color: '#0284c7',
-      fillColor: '#0284c7',
-      fillOpacity: 0.2,
-      weight: 1.5
+      fillColor: '#38bdf8',
+      fillOpacity: 0.18,
+      weight: 1.5,
+      dashArray: '4, 4'
     });
 
     userGpsVectorMarker.bindPopup(`
       <div style="font-family: 'JetBrains Mono', monospace; padding: 2px;">
-        <b style="font-size: 12px; color: #0284c7;">📍 USER GPS POSITION (VECTOR)</b><br>
+        <b style="font-size: 12px; color: #0284c7;">📍 USER GPS POSITION (OFFLINE VECTOR)</b><br>
+        • District: <b>${userLocationState.districtName || 'Yelahanka Sector'}</b><br>
         • Latitude: <b>${userCoordinates.lat.toFixed(4)}</b><br>
         • Longitude: <b>${userCoordinates.lon.toFixed(4)}</b><br>
         • Status: <b>Verified Local Device Fix</b>
@@ -1817,6 +2008,11 @@ function setBaseMapLayer(mode) {
     }
     showTopRightToast("MAP MODE SWITCHED", `Active base layer: ${modeText ? modeText.textContent : targetMode}`);
   }
+
+  // Recalculate Leaflet map dimensions so map never renders black or distorted
+  setTimeout(() => {
+    if (mapInstance) mapInstance.invalidateSize();
+  }, 100);
 }
 
 function toggleMapTileMode(forcedMode) {
@@ -2068,6 +2264,16 @@ function onLocationSuccess(lat, lon, accuracy, source, panTo = true) {
     });
   }
 
+  // Update hero stats
+  const elRain = document.getElementById('statRainfall');
+  const elDepth = document.getElementById('statDepth');
+  if (elRain && nearest && nearest.rain_mm_hr !== undefined) {
+    elRain.textContent = nearest.rain_mm_hr.toFixed(1);
+  }
+  if (elDepth && nearest && nearest.flood_depth_mm !== undefined) {
+    elDepth.textContent = nearest.flood_depth_mm.toString();
+  }
+
   // Update all badges and selectors in UI
   updateAllLocationBadges(nearest, minDist);
 
@@ -2147,13 +2353,13 @@ function populateCityDistrictPicker() {
   const picker = document.getElementById('userCityDistrictPicker');
   if (!picker) return;
 
-  const isYelahanka = userLocationState.districtName && userLocationState.districtName.includes('Yelahanka');
-  const isRajankunte = userLocationState.districtName && userLocationState.districtName.includes('Rajankunte');
+  const isYelahanka = (userLocationState.cityName === 'Yelahanka') || (userLocationState.districtName && userLocationState.districtName.includes('Yelahanka'));
+  const isRajankunte = (userLocationState.cityName === 'Rajankunte') || (userLocationState.districtName && userLocationState.districtName.includes('Rajankunte'));
 
-  picker.innerHTML = `<option value="" disabled>-- Set My City / District --</option>` +
-    `<option value="LOCAL_YELAHANKA" ${isYelahanka ? 'selected' : ''}>⭐ Yelahanka Sector (Bengaluru North)</option>` +
-    `<option value="LOCAL_RAJANKUNTE" ${isRajankunte ? 'selected' : ''}>⭐ Rajankunte Sector (Doddaballapur Road)</option>` +
-    KARNATAKA_DISTRICTS.map(d => `<option value="${d.id}" ${(!isYelahanka && !isRajankunte && d.id === userLocationState.districtId) ? 'selected' : ''}>${d.name} (${d.category.toUpperCase()})</option>`).join('');
+  picker.innerHTML = `<option value="" disabled ${(!isYelahanka && !isRajankunte && !userLocationState.districtId) ? 'selected' : ''} class="bg-zinc-900 text-zinc-400">📍 Select Karnataka District / Sector...</option>` +
+    `<option value="LOCAL_YELAHANKA" ${isYelahanka ? 'selected' : ''} class="bg-zinc-900 text-white font-bold">⭐ Yelahanka Sector (Bengaluru North)</option>` +
+    `<option value="LOCAL_RAJANKUNTE" ${isRajankunte ? 'selected' : ''} class="bg-zinc-900 text-white font-bold">⭐ Rajankunte Sector (Doddaballapur Road)</option>` +
+    KARNATAKA_DISTRICTS.map(d => `<option value="${d.id}" ${(!isYelahanka && !isRajankunte && d.id === userLocationState.districtId) ? 'selected' : ''} class="bg-zinc-900 text-white">${d.name} (${(d.category || 'district').toUpperCase()})</option>`).join('');
 }
 
 function setUserManualDistrict(districtId) {
@@ -2215,8 +2421,14 @@ function updateAllLocationBadges(nearestDistrict, distanceKm = 0) {
 
   // 5. Sync District Pickers
   const picker = document.getElementById('userCityDistrictPicker');
-  if (picker && userLocationState.districtId) {
-    picker.value = userLocationState.districtId;
+  if (picker) {
+    if (userLocationState.cityName === 'Yelahanka' || (userLocationState.districtName && userLocationState.districtName.includes('Yelahanka'))) {
+      picker.value = 'LOCAL_YELAHANKA';
+    } else if (userLocationState.cityName === 'Rajankunte' || (userLocationState.districtName && userLocationState.districtName.includes('Rajankunte'))) {
+      picker.value = 'LOCAL_RAJANKUNTE';
+    } else if (userLocationState.districtId) {
+      picker.value = userLocationState.districtId;
+    }
   }
   const offlineSel = document.getElementById('offlineMatrixDistrictSelect');
   if (offlineSel && userLocationState.districtId) {
@@ -3691,10 +3903,107 @@ function updateOfflineWeatherPredictionView() {
   if (phum) phum.textContent = `RH: ${pred.humidityPct}%`;
   if (pwind) pwind.textContent = `${pred.windSpeedKmh} km/h SW`;
   if (ppress) ppress.textContent = `${pred.pressureHpa} hPa`;
-  if (phaz) phaz.textContent = `${pred.hazardScore} %`;
-  if (pbar) pbar.style.width = `${pred.hazardScore}%`;
   if (pcb) pcb.textContent = `Cloudburst Risk: ${pred.cloudburstRisk}%`;
   if (padv) padv.textContent = pred.advisoryText;
+
+  // DYNAMIC FLOOD HAZARD ANIMATED VISUAL GAUGE UPDATES (SIH26071 Issue 6 Fix)
+  const scoreNum = parseFloat(pred.hazardScore) || 0;
+
+  if (phaz) phaz.textContent = `${scoreNum.toFixed(1)} %`;
+  if (pbar) pbar.style.width = `${Math.min(100, Math.max(0, scoreNum))}%`;
+
+  // 1. Radial SVG Arc Gauge
+  const arc = document.getElementById('predHazardArc');
+  const arcText = document.getElementById('predHazardArcText');
+  if (arc) {
+    const totalCircumference = 125.66;
+    const offset = totalCircumference - (totalCircumference * Math.min(100, Math.max(0, scoreNum)) / 100);
+    arc.style.strokeDashoffset = offset.toFixed(2);
+  }
+  if (arcText) {
+    arcText.textContent = `${scoreNum.toFixed(1)}%`;
+  }
+
+  // 2. Segmented LED Risk Meter (10 LEDs)
+  const ledContainer = document.getElementById('predLedMeter');
+  const ledStatusText = document.getElementById('predLedStatusText');
+  if (ledContainer) {
+    const activeLeds = Math.min(10, Math.max(0, Math.ceil(scoreNum / 10)));
+    const children = ledContainer.children;
+    for (let i = 0; i < children.length; i++) {
+      if (scoreNum >= (i * 10) + 1) {
+        if (i < 3) {
+          children[i].className = 'h-2.5 flex-1 rounded-sm transition-all duration-300 bg-emerald-500 shadow-sm';
+        } else if (i < 6) {
+          children[i].className = 'h-2.5 flex-1 rounded-sm transition-all duration-300 bg-amber-500 shadow-sm';
+        } else if (i < 8) {
+          children[i].className = 'h-2.5 flex-1 rounded-sm transition-all duration-300 bg-orange-500 shadow-sm';
+        } else {
+          children[i].className = 'h-2.5 flex-1 rounded-sm transition-all duration-300 bg-rose-600 shadow-sm animate-pulse';
+        }
+      } else {
+        children[i].className = 'h-2.5 flex-1 rounded-sm transition-all duration-300 bg-zinc-200/80 opacity-40';
+      }
+    }
+    if (ledStatusText) {
+      if (scoreNum >= 90) {
+        ledStatusText.textContent = `${activeLeds} / 10 LED Critical`;
+        ledStatusText.className = 'text-rose-600 font-black uppercase animate-pulse';
+      } else if (scoreNum >= 70) {
+        ledStatusText.textContent = `${activeLeds} / 10 LED Severe`;
+        ledStatusText.className = 'text-orange-600 font-extrabold uppercase';
+      } else if (scoreNum >= 35) {
+        ledStatusText.textContent = `${activeLeds} / 10 LED Warning`;
+        ledStatusText.className = 'text-amber-600 font-bold uppercase';
+      } else {
+        ledStatusText.textContent = `${activeLeds} / 10 LED Safe`;
+        ledStatusText.className = 'text-emerald-600 font-bold uppercase';
+      }
+    }
+  }
+
+  // 3. Dynamic Hazard Level Badge & Color Transitions
+  const levelBadge = document.getElementById('predHazardLevelBadge');
+  if (levelBadge) {
+    if (scoreNum >= 90) {
+      levelBadge.textContent = 'Cloudburst Critical';
+      levelBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-black uppercase bg-rose-100 text-rose-800 animate-pulse transition-all duration-300';
+      if (phaz) phaz.className = 'text-rose-600 font-black text-base md:text-lg transition-all duration-500 font-mono';
+      if (arcText) arcText.className = 'absolute bottom-0 inset-x-0 text-center font-mono font-black text-xs text-rose-600';
+    } else if (scoreNum >= 70) {
+      levelBadge.textContent = 'Severe Overflow';
+      levelBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-extrabold uppercase bg-orange-100 text-orange-800 transition-all duration-300';
+      if (phaz) phaz.className = 'text-orange-600 font-black text-base md:text-lg transition-all duration-500 font-mono';
+      if (arcText) arcText.className = 'absolute bottom-0 inset-x-0 text-center font-mono font-black text-xs text-orange-600';
+    } else if (scoreNum >= 35) {
+      levelBadge.textContent = 'Moderate Inundation';
+      levelBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-amber-100 text-amber-800 transition-all duration-300';
+      if (phaz) phaz.className = 'text-amber-600 font-black text-base md:text-lg transition-all duration-500 font-mono';
+      if (arcText) arcText.className = 'absolute bottom-0 inset-x-0 text-center font-mono font-black text-xs text-amber-600';
+    } else {
+      levelBadge.textContent = 'Safe Level';
+      levelBadge.className = 'px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-emerald-100 text-emerald-800 transition-all duration-300';
+      if (phaz) phaz.className = 'text-emerald-600 font-black text-base md:text-lg transition-all duration-500 font-mono';
+      if (arcText) arcText.className = 'absolute bottom-0 inset-x-0 text-center font-mono font-black text-xs text-emerald-600';
+    }
+  }
+
+  // 4. Animated Threat Extent Markers
+  const m0 = document.getElementById('extentMarker0');
+  const m35 = document.getElementById('extentMarker35');
+  const m70 = document.getElementById('extentMarker70');
+  const m90 = document.getElementById('extentMarker90');
+
+  if (m0) m0.style.opacity = scoreNum >= 0 ? '1' : '0.4';
+  if (m35) m35.style.opacity = scoreNum >= 35 ? '1' : '0.4';
+  if (m70) m70.style.opacity = scoreNum >= 70 ? '1' : '0.4';
+  if (m90) {
+    m90.style.opacity = scoreNum >= 90 ? '1' : '0.4';
+    const dot90 = document.getElementById('extentDot90');
+    if (dot90) {
+      dot90.className = scoreNum >= 90 ? 'w-2 h-2 rounded-full bg-rose-600 shadow-sm animate-ping' : 'w-2 h-2 rounded-full bg-rose-600 shadow-sm';
+    }
+  }
 }
 
 // HTML5 CANVAS VECTOR GIS MAP RENDERER
