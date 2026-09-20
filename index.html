@@ -12,11 +12,15 @@
   <!-- PWA Web App Manifest -->
   <link rel="manifest" href="manifest.json"/>
 
-  <!-- Local & CDN Leaflet CSS & JS (100% Offline & Online Resilient) -->
+  <!-- Local & CDN Leaflet CSS & JS (Resilient Single-Load Engine) -->
   <link rel="stylesheet" href="leaflet.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <script src="leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    if (typeof L === 'undefined') {
+      document.write('<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>');
+      document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+    }
+  </script>
   
   <!-- Custom & Bundled Offline Stylesheet -->
   <link rel="stylesheet" href="styles.css"/>
@@ -320,7 +324,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
       <!-- KARNATAKA GIS RADAR MAP (2 COLS) -->
-      <div class="lg:col-span-2 cream-card p-5 space-y-3 flex flex-col h-[520px] relative overflow-hidden" id="map-tab-section">
+      <div class="lg:col-span-2 cream-card p-5 space-y-3 flex flex-col min-h-[580px] h-[640px] relative overflow-hidden" id="map-tab-section">
         <div class="flex flex-wrap items-center justify-between gap-2 z-10 bg-white/95 p-3 rounded-2xl border border-zinc-200 shadow-sm">
           <div class="flex items-center gap-2">
             <span class="material-symbols-outlined text-zinc-900">map</span>
