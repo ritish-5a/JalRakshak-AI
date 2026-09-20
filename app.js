@@ -1142,12 +1142,13 @@ function toggleSystemOfflineMode() {
 }
 
 // LEAFLET MAP & TILE LAYERS
+let osmTileLayer = null;
 let cartoTileLayer = null;
 let cartoDarkTileLayer = null;
 let esriTileLayer = null;
 let satelliteTileLayer = null;
 let offlineTacticalGridLayer = null;
-let activeMapMode = 'carto'; // 'carto', 'cartoDark', 'esri', 'satellite', or 'vector'
+let activeMapMode = 'osm'; // 'osm', 'carto', 'cartoDark', 'esri', 'satellite', or 'vector'
 
 function initKarnatakaMap() {
   const karnatakaBounds = L.latLngBounds(L.latLng(11.0, 73.0), L.latLng(19.0, 79.5));
@@ -1159,33 +1160,39 @@ function initKarnatakaMap() {
     maxBoundsViscosity: 0.9
   });
 
-  // 1. CartoDB Voyager Tile Layer (Primary Base Map)
+  // 1. OpenStreetMap Standard Layer (Primary High-Detail Base Map)
+  osmTileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  });
+
+  // 2. CartoDB Voyager Tile Layer
   cartoTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     maxZoom: 19
   });
 
-  // 2. CartoDB Dark Tile Layer
+  // 3. CartoDB Dark Tile Layer
   cartoDarkTileLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png', {
     subdomains: 'abcd',
     attribution: '&copy; OpenStreetMap &copy; CARTO',
     maxZoom: 19
   });
 
-  // 3. Esri WorldTopo Tile Layer (Secondary Base Map)
+  // 4. Esri WorldTopo Tile Layer (Topographic Terrain)
   esriTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Tiles &copy; Esri &mdash; Topo',
     maxZoom: 18
   });
 
-  // 4. Esri Satellite Imagery
+  // 5. Esri Satellite Imagery
   satelliteTileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Tiles &copy; Esri &mdash; Satellite',
     maxZoom: 18
   });
 
-  // 5. Zero-Network Tactical Grid Layer (Local HTML5 Canvas Tile Generator)
+  // 6. Zero-Network Tactical Grid Layer (Local HTML5 Canvas Tile Generator for 100% Offline Mode)
   const OfflineTacticalGridClass = L.GridLayer.extend({
     createTile: function(coords) {
       const tile = document.createElement('canvas');
@@ -1219,20 +1226,6 @@ function initKarnatakaMap() {
     attribution: 'JalRakshak AI Offline Tactical GIS (Zero Network)'
   });
 
-  // Tile Error Auto-Fallback Listener on all raster tile layers
-  const handleTileError = (e) => {
-    console.warn('[JalRakshak Map] Raster Tile error (403/Offline/Network), triggering offline vector fallback:', e);
-    if (activeMapMode !== 'vector') {
-      setBaseMapLayer('vector');
-      showTopRightToast("🗺️ Vector Tile Fallback Active", "Raster tiles unavailable (Offline/Network error). Switched to 100% tactical vector map.");
-    }
-  };
-
-  cartoTileLayer.on('tileerror', handleTileError);
-  cartoDarkTileLayer.on('tileerror', handleTileError);
-  esriTileLayer.on('tileerror', handleTileError);
-  satelliteTileLayer.on('tileerror', handleTileError);
-
   // Initialize Layer Groups
   weatherLayerGroup = L.layerGroup().addTo(mapInstance);
   rainRadarLayerGroup = L.layerGroup().addTo(mapInstance);
@@ -1244,18 +1237,17 @@ function initKarnatakaMap() {
   addHospitalMarkers();
   renderSvgVectorOfflineMap();
 
-  // Check protocol & network status for automatic vector fallback
-  const isFileProtocol = window.location.protocol === 'file:';
+  // Check network status: default to OpenStreetMap online, vector map offline
   const isOffline = !navigator.onLine;
 
-  if (isFileProtocol || isOffline) {
+  if (isOffline) {
     setBaseMapLayer('vector');
     showTopRightToast(
       "🗺️ Vector Offline Mode Active",
-      isFileProtocol ? "Loaded via file:/// protocol. 100% offline tactical vector map active." : "Offline network detected. Vector map active."
+      "Offline network detected. 100% tactical vector map active."
     );
   } else {
-    setBaseMapLayer('carto');
+    setBaseMapLayer('osm');
   }
 
   // Initial Open-Meteo Weather API Fetch across Karnataka via Auto-Sync Engine
@@ -1949,9 +1941,9 @@ function renderSvgVectorOfflineMap() {
 function setBaseMapLayer(mode) {
   if (!mapInstance) return;
 
-  const validModes = ['carto', 'cartoDark', 'esri', 'satellite', 'vector'];
-  let targetMode = (mode === 'svg' || mode === 'osm') ? (mode === 'svg' ? 'vector' : 'carto') : mode;
-  if (!validModes.includes(targetMode)) targetMode = 'vector';
+  const validModes = ['osm', 'carto', 'cartoDark', 'esri', 'satellite', 'vector'];
+  let targetMode = (mode === 'svg') ? 'vector' : mode;
+  if (!validModes.includes(targetMode)) targetMode = 'osm';
 
   // Force vector mode if device is completely offline and an online raster layer is requested
   if (!navigator.onLine && targetMode !== 'vector') {
@@ -1962,6 +1954,7 @@ function setBaseMapLayer(mode) {
   activeMapMode = targetMode;
 
   // Remove existing base layers
+  if (osmTileLayer && mapInstance.hasLayer(osmTileLayer)) mapInstance.removeLayer(osmTileLayer);
   if (cartoTileLayer && mapInstance.hasLayer(cartoTileLayer)) mapInstance.removeLayer(cartoTileLayer);
   if (cartoDarkTileLayer && mapInstance.hasLayer(cartoDarkTileLayer)) mapInstance.removeLayer(cartoDarkTileLayer);
   if (esriTileLayer && mapInstance.hasLayer(esriTileLayer)) mapInstance.removeLayer(esriTileLayer);
@@ -1993,7 +1986,10 @@ function setBaseMapLayer(mode) {
     showTopRightToast("⚡ OFFLINE VECTOR ACTIVE", "100% on-device tactical coordinate grid, district polygons & rivers loaded.");
   } else {
     if (mapEl) mapEl.classList.remove('vector-offline-active');
-    if (targetMode === 'cartoDark') {
+    if (targetMode === 'osm') {
+      if (osmTileLayer) osmTileLayer.addTo(mapInstance);
+      if (modeText) modeText.textContent = "OPENSTREETMAP";
+    } else if (targetMode === 'cartoDark') {
       if (cartoDarkTileLayer) cartoDarkTileLayer.addTo(mapInstance);
       if (modeText) modeText.textContent = "CARTO DARK";
     } else if (targetMode === 'esri') {
@@ -2010,9 +2006,11 @@ function setBaseMapLayer(mode) {
   }
 
   // Recalculate Leaflet map dimensions so map never renders black or distorted
-  setTimeout(() => {
-    if (mapInstance) mapInstance.invalidateSize();
-  }, 100);
+  [50, 200, 500].forEach(delay => {
+    setTimeout(() => {
+      if (mapInstance) mapInstance.invalidateSize();
+    }, delay);
+  });
 }
 
 function toggleMapTileMode(forcedMode) {
@@ -2020,7 +2018,7 @@ function toggleMapTileMode(forcedMode) {
     setBaseMapLayer(forcedMode);
     return;
   }
-  const modes = ['carto', 'cartoDark', 'esri', 'satellite', 'vector'];
+  const modes = ['osm', 'carto', 'cartoDark', 'esri', 'satellite', 'vector'];
   let nextIdx = (modes.indexOf(activeMapMode) + 1) % modes.length;
   if (!navigator.onLine) {
     setBaseMapLayer('vector');

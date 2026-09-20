@@ -353,11 +353,14 @@
         <!-- BASE MAP SWITCHER PILLS -->
         <div class="flex items-center gap-1.5 z-10 px-1 font-mono text-[10px] overflow-x-auto">
           <span class="text-zinc-500 font-bold uppercase text-[9px] mr-1 shrink-0">BASE MAP:</span>
-          <button id="baseMapBtn_carto" onclick="setBaseMapLayer('carto')" class="px-2.5 py-1 rounded-full bg-zinc-900 text-white font-bold flex items-center gap-1 transition-all shadow-sm shrink-0">
-            🗺️ CartoDB Voyager
+          <button id="baseMapBtn_osm" onclick="setBaseMapLayer('osm')" class="px-2.5 py-1 rounded-full bg-zinc-900 text-white font-bold flex items-center gap-1 transition-all shadow-sm shrink-0">
+            🗺️ OpenStreetMap
+          </button>
+          <button id="baseMapBtn_carto" onclick="setBaseMapLayer('carto')" class="px-2.5 py-1 rounded-full bg-zinc-200 text-zinc-700 hover:bg-zinc-300 font-bold flex items-center gap-1 transition-all shrink-0">
+            🏙️ CartoDB Voyager
           </button>
           <button id="baseMapBtn_cartoDark" onclick="setBaseMapLayer('cartoDark')" class="px-2.5 py-1 rounded-full bg-zinc-200 text-zinc-700 hover:bg-zinc-300 font-bold flex items-center gap-1 transition-all shrink-0">
-            🌑 CartoDB Dark
+            🌑 Carto Dark
           </button>
           <button id="baseMapBtn_esri" onclick="setBaseMapLayer('esri')" class="px-2.5 py-1 rounded-full bg-zinc-200 text-zinc-700 hover:bg-zinc-300 font-bold flex items-center gap-1 transition-all shrink-0">
             ⛰️ Esri Topo
