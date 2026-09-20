@@ -12,15 +12,22 @@
   <!-- PWA Web App Manifest -->
   <link rel="manifest" href="manifest.json"/>
 
-  <!-- Local Leaflet CSS & JS (100% Offline) -->
+  <!-- Local & CDN Leaflet CSS & JS (100% Offline & Online Resilient) -->
   <link rel="stylesheet" href="leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
   <script src="leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
   
-  <!-- Custom & Bundled Offline Stylesheet (Local Fonts, Material Symbols, Tailwind Utilities & Component Styles) -->
+  <!-- Custom & Bundled Offline Stylesheet -->
   <link rel="stylesheet" href="styles.css"/>
 
-  <!-- Local Tailwind Engine -->
+  <!-- Google Material Symbols Icons Fallback -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" />
+
+  <!-- Local & CDN Tailwind Engine -->
   <script src="tailwindcss.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
 
   <script>
     tailwind.config = {

@@ -1,24 +1,26 @@
 {
   "version": 2,
-  "name": "jalrakshak-ai",
-  "builds": [
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "headers": [
     {
-      "src": "api/index.py",
-      "use": "@vercel/python"
-    },
-    {
-      "src": "index.html",
-      "use": "@vercel/static"
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
+      ]
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/(.*)",
-      "dest": "api/index.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
+      "source": "/api/(.*)",
+      "destination": "/api/index.py"
     }
   ]
 }
